@@ -14,26 +14,39 @@ def get_llm():
 
 
 def get_llm_response(query, docs):
-
     llm = get_llm()
 
-    # Build context
+    # 🔥 Combine retrieved documents
     context = "\n\n".join([doc.page_content for doc in docs])
 
+    # 🔥 Strong and clear prompt
     prompt = f"""
-You are an enterprise AI assistant.
+You are a strict enterprise AI assistant.
 
-Answer ONLY from the provided context.
-Do NOT make assumptions.
-If the answer is not in the context, say: "No information available".
+Rules:
+- Answer ONLY using the provided context.
+- Do NOT use outside knowledge.
+- If the answer is not clearly present, say EXACTLY: "No information available".
+- Be precise and concise.
 
 Context:
 {context}
 
 Question:
 {query}
+
+Answer:
 """
 
-    response = llm.invoke(prompt)
+    try:
+        response = llm.invoke(prompt)
+        answer = response.content.strip()
 
-    return response.content
+        # 🔥 Safety fallback (very important)
+        if not answer or "no information" in answer.lower():
+            return "No information available"
+
+        return answer
+
+    except Exception as e:
+        return f"Error generating response: {str(e)}"

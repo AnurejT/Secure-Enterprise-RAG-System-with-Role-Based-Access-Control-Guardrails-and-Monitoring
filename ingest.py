@@ -1,6 +1,6 @@
 """
 Re-ingest all PDFs from the data/ folder into the vector_db/ directory.
-Run this once whenever you add new documents or change the vector store path.
+Role detection is handled automatically by rag/ingestion.py via detect_role().
 
 Usage:
     python ingest.py

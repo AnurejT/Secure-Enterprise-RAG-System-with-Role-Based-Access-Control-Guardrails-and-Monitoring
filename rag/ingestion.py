@@ -5,13 +5,32 @@ from rag.embeddings import get_embeddings
 from rag.vector_store import create_vector_store
 
 
+# 🔥 Detect role from content
+def detect_role(text):
+    text = text.lower()
+
+    if "hr department" in text:
+        return ["hr", "admin"]
+    elif "finance department" in text:
+        return ["finance", "admin"]
+    elif "engineering department" in text:
+        return ["engineering", "admin"]
+    elif "marketing department" in text:
+        return ["marketing", "admin"]
+    else:
+        return ["admin"]
+
+
 def ingest_pdf(file_path):
+    """
+    Ingest a PDF file into the vector database with RBAC metadata
+    """
 
     # 1. Load PDF
     loader = PyPDFLoader(file_path)
     documents = loader.load()
 
-    print(f"Loaded {len(documents)} pages")
+    print(f"[INFO] Loaded {len(documents)} pages from {file_path}")
 
     # 2. Split into chunks
     splitter = RecursiveCharacterTextSplitter(
@@ -21,18 +40,25 @@ def ingest_pdf(file_path):
 
     chunks = splitter.split_documents(documents)
 
-    print(f"Created {len(chunks)} chunks")
+    print(f"[INFO] Created {len(chunks)} chunks")
 
-    # 3. Add Metadata (RBAC Ready 🔐)
+    # 3. 🔐 Attach RBAC metadata dynamically
     for chunk in chunks:
-        chunk.metadata["role_allowed"] = ["finance"]   # change later dynamically
-        chunk.metadata["department"] = "finance"
+        content = chunk.page_content
+
+        roles = detect_role(content)
+
+        chunk.metadata["role_allowed"] = roles
         chunk.metadata["source"] = file_path
+
+    print(f"[INFO] RBAC metadata assigned to all chunks")
 
     # 4. Create embeddings
     embeddings = get_embeddings()
 
     # 5. Store in Vector DB
     vector_db = create_vector_store(chunks, embeddings)
+
+    print(f"[INFO] Stored in vector database successfully")
 
     return vector_db
