@@ -13,36 +13,14 @@ def get_llm():
     )
 
 
-def get_llm_response(query, docs):
+def get_llm_response(prompt: str) -> str:
+    """Invoke the LLM with a pre-built prompt string."""
     llm = get_llm()
-
-    # 🔥 Combine retrieved documents
-    context = "\n\n".join([doc.page_content for doc in docs])
-
-    # 🔥 Strong and clear prompt
-    prompt = f"""
-You are a strict enterprise AI assistant.
-
-Rules:
-- Answer ONLY using the provided context.
-- Do NOT use outside knowledge.
-- If the answer is not clearly present, say EXACTLY: "No information available".
-- Be precise and concise.
-
-Context:
-{context}
-
-Question:
-{query}
-
-Answer:
-"""
 
     try:
         response = llm.invoke(prompt)
         answer = response.content.strip()
 
-        # 🔥 Safety fallback (very important)
         if not answer or "no information" in answer.lower():
             return "No information available"
 
