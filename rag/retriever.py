@@ -3,7 +3,6 @@ from rag.embeddings import get_embeddings
 
 
 def get_relevant_docs(query):
-
     embeddings = get_embeddings()
     vector_db = load_vector_store(embeddings)
 

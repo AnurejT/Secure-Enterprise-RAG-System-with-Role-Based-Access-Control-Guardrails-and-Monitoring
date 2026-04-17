@@ -40,3 +40,20 @@ def enforce_output_constraints(answer: str) -> str:
         return "Answer not reliable. Please refine your query."
 
     return answer
+
+
+# ---------------- COMBINED INPUT GUARDRAIL (used by rag_service) ---------------- #
+
+def input_guardrail(query: str) -> bool:
+    """
+    Returns True if the query is safe to process, False if it should be blocked.
+    """
+    if not query or not query.strip():
+        return False
+    if len(query) > 300:
+        return False
+    if is_malicious_query(query):
+        return False
+    if is_irrelevant_query(query):
+        return False
+    return True

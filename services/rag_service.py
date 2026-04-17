@@ -1,92 +1,89 @@
-# services/rag_service.py
-
 from rag.retriever import get_relevant_docs
-from rbac.access_control import rbac_filter
 from rag.llm import get_llm_response
-
-from guardrails.filters import (
-    is_malicious_query,
-    is_irrelevant_query,
-    check_empty_context,
-    enforce_output_constraints
-)
-
-import time
-
-# ⏱️ Simple rate limiting
-last_query_time = 0
+from rbac.access_control import filter_docs_by_role
+from guardrails.filters import input_guardrail
 
 
-def rate_limit():
-    global last_query_time
-    current_time = time.time()
+def process_query(user_query, role="employee"):
+    """
+    Main RAG pipeline service:
+    Retriever → RBAC → Guardrails → LLM
+    """
 
-    if current_time - last_query_time < 2:
-        return False
+    # ---------------------------
+    # 1. INPUT GUARDRAIL
+    # ---------------------------
+    if not input_guardrail(user_query):
+        return {
+            "answer": "Request blocked by security guardrails.",
+            "sources": []
+        }
 
-    last_query_time = current_time
-    return True
+    # ---------------------------
+    # 2. RETRIEVE DOCUMENTS
+    # ---------------------------
+    docs = get_relevant_docs(user_query)
 
+    if not docs:
+        return {
+            "answer": "No information available",
+            "sources": []
+        }
 
-def process_query(query, user_role):
+    # ---------------------------
+    # 3. RBAC FILTER (IMPORTANT FIX)
+    # ---------------------------
+    docs = filter_docs_by_role(docs, role)
 
-    # ---------------- INPUT GUARDRAILS ---------------- #
+    if not docs:
+        return {
+            "answer": "You do not have access to this information.",
+            "sources": []
+        }
 
-    if not rate_limit():
-        return "⚠️ Too many requests. Please wait."
+    # ---------------------------
+    # 4. FORMAT CONTEXT SAFELY
+    # ---------------------------
+    context = "\n\n".join(
+        [
+            getattr(doc, "page_content", str(doc))
+            for doc in docs
+        ]
+    )
 
-    if is_malicious_query(query):
-        return "❌ Query blocked due to sensitive content"
-
-    if is_irrelevant_query(query):
-        return "❌ Query not relevant to enterprise data"
-
-    if len(query) > 300:
-        return "❌ Query too long"
-
-    # ---------------- RETRIEVAL ---------------- #
-
-    docs = get_relevant_docs(query)
-    print(f"[RAG] Retrieved {len(docs)} docs")
-
-    # ---------------- RBAC ---------------- #
-
-    docs = rbac_filter(docs, user_role)
-    print(f"[RBAC] After filter: {len(docs)} docs")
-
-    # ---------------- CONTEXT GUARDRAIL ---------------- #
-
-    if check_empty_context(docs):
-        return "No information available"
-
-    # ---------------- PREPARE CONTEXT ---------------- #
-
-    context = "\n".join([doc.page_content for doc in docs])
-
-    # ---------------- LLM ---------------- #
-
+    # ---------------------------
+    # 5. BUILD PROMPT
+    # ---------------------------
     prompt = f"""
-You are a secure enterprise assistant.
+You are an enterprise AI assistant.
 
-Rules:
-- Answer ONLY from the given context
-- Do NOT make assumptions
-- If answer is not found, say: "No information available"
+STRICT RULES:
+- Answer ONLY using the provided context
+- If answer is not in context, say "No information available"
+- Do NOT guess or hallucinate
 
-Context:
+ROLE: {role}
+
+CONTEXT:
 {context}
 
-Question:
-{query}
+QUESTION:
+{user_query}
 
-Answer:
+FINAL ANSWER:
 """
 
-    response = get_llm_response(prompt)
-    answer = response
+    # ---------------------------
+    # 6. GENERATE RESPONSE
+    # ---------------------------
+    answer = get_llm_response(prompt)
 
-    # ---------------- OUTPUT GUARDRAILS ---------------- #
-
-    answer = enforce_output_constraints(answer)
-
-    return answer
+    # ---------------------------
+    # 7. RETURN RESPONSE
+    # ---------------------------
+    return {
+        "answer": answer,
+        "sources": [
+            getattr(doc, "metadata", {}) for doc in docs
+        ]
+    }
