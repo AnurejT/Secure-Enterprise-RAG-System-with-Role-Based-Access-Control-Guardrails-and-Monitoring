@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+
+# Virtual Environment — NEVER commit this
+venv/
+.venv/
+env/
+ENV/
+
+# Environment variables — keep secrets out of Git
+.env
+
+# Vector DB — large binary files, regenerate with ingest.py
+vector_db/
+database/
+db/
+
+# IDE / OS files
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Model caches
+.cache/
