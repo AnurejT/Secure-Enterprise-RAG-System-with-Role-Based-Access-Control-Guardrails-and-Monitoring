@@ -7,32 +7,84 @@ from rag.embeddings import get_embeddings
 from rag.vector_store import create_vector_store
 
 
-# 🔥 Strong keyword-based role detection
+# ─── Role detection ─────────────────────────────────────────────────────────
+# Keyword sets per role — ordered from most-specific to least-specific
 ROLE_KEYWORDS = {
-    "hr": ["hr", "human resources", "employee", "recruitment", "salary", "leave"],
-    "finance": ["finance", "budget", "expense", "revenue", "cost", "profit"],
-    "engineering": ["engineering", "development", "software", "system", "architecture"],
-    "marketing": ["marketing", "campaign", "branding", "promotion", "sales"],
+    "finance":     ["finance", "budget", "expense", "revenue", "cost", "profit",
+                   "invoice", "payroll", "audit", "fiscal", "accounting", "cash flow"],
+    "hr":          ["human resources", "recruitment", "onboarding", "performance review",
+                   "leave policy", "termination", "hr department", "employee handbook"],
+    "marketing":   ["marketing", "campaign", "branding", "promotion", "advertising",
+                   "social media post", "seo", "lead generation", "email marketing"],
+    "engineering": ["engineering", "software development", "architecture", "api",
+                   "deployment", "codebase", "microservice", "ci/cd"],
+}
+
+# Filename → role mapping (highest priority — most reliable signal)
+FILENAME_ROLE_MAP = {
+    "finance":     "finance",
+    "budget":      "finance",
+    "expense":     "finance",
+    "payroll":     "finance",
+    "hr":          "hr",
+    "human_resource": "hr",
+    "recruitment": "hr",
+    "marketing":   "marketing",
+    "campaign":    "marketing",
+    "branding":    "marketing",
+    "engineering": "engineering",
+    "technical":   "engineering",
+    "software":    "engineering",
 }
 
 
-def detect_roles(text):
-    text = text.lower()
-    detected_roles = set()
+def detect_roles_from_filename(file_path):
+    """Return a single role if the filename clearly indicates a department."""
+    if not file_path:
+        return None
+    name = file_path.replace("\\", "/").split("/")[-1].lower()
+    for keyword, role in FILENAME_ROLE_MAP.items():
+        if keyword in name:
+            return role
+    return None
 
+
+def detect_roles(text, file_path=None):
+    """Strict role detection — filename takes priority, then keyword counts."""
+
+    # ── 1. Filename is the strongest signal ──────────────────────────────────
+    filename_role = detect_roles_from_filename(file_path)
+    if filename_role:
+        return [filename_role, "admin"]
+
+    # ── 2. Keyword count per role ────────────────────────────────────────────
+    text_lower = text.lower()
+    scores = {}
     for role, keywords in ROLE_KEYWORDS.items():
-        for keyword in keywords:
-            if keyword in text:
-                detected_roles.add(role)
+        # Use multi-word phrases as exact substring matches (more precise)
+        scores[role] = sum(1 for kw in keywords if kw in text_lower)
 
-    # ✅ If nothing detected → restrict access (SAFE DEFAULT)
-    if not detected_roles:
-        return ["admin"]   # Only admin can access unknown content
+    max_score = max(scores.values(), default=0)
 
-    # ✅ Always allow admin access
+    # ── 3. Require a clear winner — must have ≥2 hits AND beat runner-up ────
+    MINIMUM_HITS = 2
+    if max_score < MINIMUM_HITS:
+        return ["admin"]  # Too ambiguous → restrict to admin only
+
+    winning_roles = [
+        role for role, score in scores.items()
+        if score == max_score
+    ]
+
+    # If there's a tie between roles (e.g. 3 finance hits, 3 marketing hits),
+    # restrict to admin because we cannot safely determine ownership.
+    if len(winning_roles) > 1:
+        return ["admin"]
+
+    detected_roles = set(winning_roles)
     detected_roles.add("admin")
-
     return list(detected_roles)
+
 
 
 def detect_department(roles):
@@ -41,6 +93,8 @@ def detect_department(roles):
         if role != "admin":
             return role
     return "general"
+
+
 
 
 def ingest_pdf(file_path):
@@ -68,7 +122,7 @@ def ingest_pdf(file_path):
     for chunk in chunks:
         content = chunk.page_content
 
-        roles = detect_roles(content)
+        roles = detect_roles(content, file_path=file_path)
         department = detect_department(roles)
 
         chunk.metadata["role_allowed"] = roles

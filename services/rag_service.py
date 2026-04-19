@@ -54,24 +54,46 @@ def process_query(user_query, role="employee"):
     # ---------------------------
     # 5. BUILD PROMPT
     # ---------------------------
-    prompt = f"""
-You are an enterprise AI assistant.
+    if role.lower() == "admin":
+        # Admin has full unrestricted access across all departments
+        prompt = f"""
+You are an enterprise AI assistant with full administrative access to all departments.
+
+RULES:
+- Answer using the provided context from any department.
+- Be comprehensive and accurate.
+- If the answer is not in the context, say "No information available."
+- Do NOT guess or hallucinate.
+
+CONTEXT (all departments):
+{context}
+
+QUESTION: {user_query}
+
+ANSWER:
+"""
+    else:
+        # Non-admin: strictly scoped to their department only
+        prompt = f"""
+You are a secure enterprise AI assistant with strict role-based access control.
 
 STRICT RULES:
-- Answer ONLY using the provided context
-- If answer is not in context, say "No information available"
-- Do NOT guess or hallucinate
+- Answer ONLY using the provided context below.
+- The user's role is: {role.upper()}. Only answer questions relevant to this role/department.
+- If the context contains information from a DIFFERENT department, IGNORE it and say "No information available for your role."
+- Do NOT guess, hallucinate, or use general knowledge outside the context.
+- Do NOT reveal information from other departments.
 
 ROLE: {role}
 
-CONTEXT:
+CONTEXT (filtered to {role} department):
 {context}
 
-QUESTION:
-{user_query}
+QUESTION: {user_query}
 
-FINAL ANSWER:
+ANSWER (strictly from {role} context only):
 """
+
 
     # ---------------------------
     # 6. GENERATE RESPONSE

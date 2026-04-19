@@ -18,14 +18,15 @@ body {
   font-family: 'Inter', sans-serif;
   background: var(--bg);
   color: var(--text);
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
+  /* Do NOT set overflow:hidden here — login page needs to scroll */
 }
 
 .app {
   display: flex;
   height: 100vh;
   width: 100vw;
+  overflow: hidden; /* Chat layout: locked to viewport */
 }
 
 /* ─── SIDEBAR ─────────────────────────────── */

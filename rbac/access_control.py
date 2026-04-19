@@ -1,8 +1,13 @@
 def rbac_filter(documents, user_role):
     """
     Filters documents based on user role.
+    Admin bypasses all filters and sees every document.
     If no role_allowed metadata is set, the doc is accessible to all.
     """
+    # ── Admin sees everything ────────────────────────────────────────────────
+    if user_role.lower() == "admin":
+        return documents
+
     filtered_docs = []
 
     for doc in documents:
@@ -20,6 +25,7 @@ def rbac_filter(documents, user_role):
             filtered_docs.append(doc)
 
     return filtered_docs
+
 
 
 # Alias used by rag_service.py

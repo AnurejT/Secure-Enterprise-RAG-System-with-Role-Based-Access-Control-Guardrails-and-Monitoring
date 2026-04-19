@@ -10,8 +10,8 @@
 ## Project Overview
 
 **Name:** Secure Enterprise RAG System with Role-Based Access Control, Guardrails, and Monitoring
-**Stack:** Python 3.10, LangChain ecosystem, ChromaDB, Groq (Llama 3.1), HuggingFace Embeddings, Flask
-**Interface:** CLI (interactive loop) — REST API and Web UI are planned but not yet built
+**Stack:** Python 3.10, LangChain ecosystem, ChromaDB, Groq (Llama 3.1), HuggingFace Embeddings, Flask + Flask-CORS, React 18 (Create React App), Axios
+**Interface:** REST API (`api/`) + React Web UI (`frontend_react/`) — CLI entry point (`app.py`) also retained
 **Purpose:** A document QA system for enterprise use that restricts what information each user role can access, based on metadata attached to document chunks at ingestion time.
 
 ---
@@ -19,6 +19,7 @@
 ## Quick Start
 
 ```powershell
+# ── BACKEND ──────────────────────────────────────────
 # 1. Recreate venv (use `py`, not `python`, on this machine — python is not in global PATH)
 py -m venv venv
 
@@ -34,8 +35,14 @@ pip install -r requirements.txt
 # 5. Ingest documents
 python ingest.py        # processes all PDFs in data/
 
-# 6. Run the app
-python app.py           # interactive CLI with role prompt
+# 6. Run the Flask API server
+python -m api.app       # serves on http://localhost:5000
+
+# ── FRONTEND ─────────────────────────────────────────
+# In a separate terminal:
+cd frontend_react
+npm install
+npm start               # React dev server on http://localhost:3000
 ```
 
 > ⚠️ `venv/` and `vector_db/` are git-ignored. After cloning, always recreate the venv and re-run `ingest.py`.
@@ -67,7 +74,36 @@ python app.py           # interactive CLI with role prompt
 - [x] `.gitignore` correctly excludes `venv/`, `vector_db/`, `.env`, `__pycache__/`, `.cache/`
 - [x] `requirements.txt` generated and verified (all packages install successfully)
 - [x] Git repo initialized and large files issue resolved (venv removed from tracking)
-- [x] Project documentation: `AGENT.md` + `docs/PROJECT_STRUCTURE.md`
+- [x] Project documentation: `AGENT.md` + `docs/PROJECT_STRUCTURE.md` + `RULES.md`
+
+### Phase 4 — REST API (`api/`)
+- [x] Flask app with CORS support (`api/app.py` — `Flask`, `flask_cors`)
+- [x] Blueprint-based routing (`api/routes.py`)
+- [x] `POST /api/query` — accepts `{ query, role }`, returns `{ answer, sources }`
+- [x] `POST /api/upload` — accepts multipart PDF upload, saves to `data/`, ingests into vector DB
+- [x] Stub files created: `api/auth.py`, `api/schemas.py` (ready for JWT auth and request validation)
+
+### Phase 5 — Input & Output Guardrails (`guardrails/`)
+- [x] `guardrails/filters.py` fully implemented:
+  - **`is_malicious_query()`** — blocks queries containing sensitive patterns (password, credit card, CVV, SSN, bank account)
+  - **`is_irrelevant_query()`** — blocks off-topic queries (movie, song, cricket, weather)
+  - **`check_empty_context()`** — checks if retrieval returned no documents
+  - **`enforce_output_constraints()`** — strips uncertain language ("i think", "maybe", "probably") from LLM output
+  - **`input_guardrail()`** — combined gate: empty check + length limit (300 chars) + malicious + irrelevant
+- [x] Guardrails integrated into `services/rag_service.py` as Step 1 of pipeline (before retrieval)
+- [x] Service returns structured `{ answer, sources }` JSON — safe for API consumption
+
+### Phase 6 — React Web UI (`frontend_react/`)
+- [x] React 18 (Create React App) with Axios
+- [x] **Sidebar** — role selector (Employee, Finance, Marketing, HR, Admin) with role-aware colors
+- [x] **Chat area** — message history, user/bot/error message bubbles, auto-scroll to latest
+- [x] **Typing indicator** — animated 3-dot loader while awaiting LLM response
+- [x] **Source chips** — displays source document filenames returned from API below each bot response
+- [x] **Upload panel** — drag-and-drop  or click-to-select PDF upload (role-gated: Employee role shows locked state)
+- [x] **Role-gated upload** — only Finance, HR, Marketing, Admin roles can upload documents
+- [x] **Empty state** — contextual message shown when no chat messages exist
+- [x] **Responsive layout** — sidebar + main chat column layout with polished CSS (`App.css`)
+- [x] Component stubs: `Chat.js`, `RoleSelector.js`, `Uploader.js` (main logic consolidated in `App.js`)
 
 ---
 
@@ -75,10 +111,17 @@ python app.py           # interactive CLI with role prompt
 
 See [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md) for the full annotated directory tree, module responsibility table, and data-flow diagram.
 
-### Pipeline Summary
+### Full Pipeline
 
 ```
-User (query + role) → Retrieve top-5 docs → RBAC filter → Guard → LLM (Groq) → Response
+User (Web UI) → POST /api/query { query, role }
+  → input_guardrail()          [blocks malicious / irrelevant / empty queries]
+  → get_relevant_docs()        [ChromaDB top-5 similarity search]
+  → filter_docs_by_role()      [RBAC: filters by role_allowed metadata]
+  → format context
+  → get_llm_response()         [Groq Llama 3.1 8B]
+  → enforce_output_constraints()
+  → return { answer, sources }
 ```
 
 ### Key Design Decisions
@@ -90,6 +133,9 @@ User (query + role) → Retrieve top-5 docs → RBAC filter → Guard → LLM (G
 | Groq + Llama 3.1 8B | Fast inference, free tier available, fits enterprise demo budget |
 | `all-MiniLM-L6-v2` embeddings | Balance of speed and semantic quality for document retrieval |
 | Strict "context-only" prompt | Prevents hallucination — critical for enterprise trustworthiness |
+| Blueprint-based Flask routing | Clean separation; ready to add auth middleware per-blueprint |
+| React CRA (not Vite/Next) | Simplest setup for a demo-grade UI with no SSR requirements |
+| Guardrails before retrieval | Fail fast — don't waste a ChromaDB call on a clearly bad query |
 
 ---
 
@@ -98,13 +144,15 @@ User (query + role) → Retrieve top-5 docs → RBAC filter → Guard → LLM (G
 | Issue | Status | Notes |
 |---|---|---|
 | `role_allowed` is hardcoded to `["finance"]` in `ingestion.py` | ⚠️ Open | Should be passed dynamically per-document or read from a config/manifest |
-| No REST API yet | ⚠️ Planned | `api/` directory is empty |
-| No web frontend yet | ⚠️ Planned | `frontend/` directory is empty |
-| `guardrails/` is empty | ⚠️ Planned | No input sanitisation or output safety checks yet |
-| `monitoring/` is empty | ⚠️ Planned | No telemetry, audit logging, or latency tracking yet |
-| `config/settings.py` is an empty stub | ⚠️ Planned | `GROQ_API_KEY` loaded inline in `llm.py` — should centralise |
-| `models/role.py` and `models/user.py` are empty stubs | ⚠️ Planned | No dataclasses defined yet |
-| `utils/logger.py` is empty | ⚠️ Planned | All logging uses raw `print()` — needs structured logging |
+| `config/settings.py` is empty | ⚠️ Open | `GROQ_API_KEY` loaded inline in `llm.py` — should centralise all env vars |
+| `models/role.py` and `models/user.py` are empty stubs | ⚠️ Open | No dataclasses defined yet |
+| `utils/logger.py` is empty | ⚠️ Open | All logging uses raw `print()` — needs structured logging |
+| `utils/helpers.py` is empty | ⚠️ Open | Placeholder for shared utilities |
+| `api/auth.py` is empty | ⚠️ Open | No JWT or API-key authentication yet |
+| `api/schemas.py` is empty | ⚠️ Open | No request/response validation (e.g. Marshmallow/Pydantic) |
+| `monitoring/` directory is empty | ⚠️ Open | No telemetry, audit logging, or latency tracking yet |
+| Frontend `api.js` is empty | ⚠️ Open | Axios calls are made inline in `App.js`; should be extracted |
+| Frontend not proxied to backend in dev | ⚠️ Info | Requires manual CORS handling; add `"proxy": "http://localhost:5000"` in `package.json` to simplify |
 | `python` not in global PATH on dev machine | ℹ️ Info | Use `py` launcher or activate venv first |
 
 ---
@@ -113,21 +161,22 @@ User (query + role) → Retrieve top-5 docs → RBAC filter → Guard → LLM (G
 
 ### Near-Term
 - [ ] **Dynamic RBAC metadata** — accept `role_allowed` as a parameter to `ingest_pdf()` or read from a YAML/JSON manifest file alongside each PDF
-- [ ] **`config/settings.py`** — centralise all env vars, model names, chunk sizes, DB paths
+- [ ] **`config/settings.py`** — centralise all env vars, model names, chunk sizes, DB paths using `pydantic-settings` or plain dataclass
 - [ ] **`models/user.py` + `models/role.py`** — define `User` dataclass and `Role` enum
-- [ ] **`utils/logger.py`** — replace all `print()` with structured logging (e.g., Python `logging` module)
+- [ ] **`utils/logger.py`** — replace all `print()` with structured logging (Python `logging` module, JSON format)
+- [ ] **`api/auth.py`** — JWT or API-key authentication; protect `/query` and `/upload` endpoints
+- [ ] **`api/schemas.py`** — request/response validation with Pydantic or Marshmallow
+- [ ] **Frontend `api.js`** — extract all Axios calls into a typed API client module
 
 ### Medium-Term
-- [ ] **REST API (`api/`)** — Flask endpoints: `/ingest`, `/query`, `/roles`
-- [ ] **Authentication layer** — JWT or API-key auth tied to `User` model
-- [ ] **`guardrails/`** — input sanitisation (prompt injection protection) + output toxicity filter
-- [ ] **`monitoring/`** — request logging with timestamps, latency, role, query, doc count
+- [ ] **`monitoring/`** — request logging with timestamps, latency, role, query, doc count; persist to SQLite or a log file
+- [ ] **Guardrails expansion** — add output toxicity scoring (e.g., Detoxify) and PII redaction
+- [ ] **Multi-tenant vector collections** — separate ChromaDB collections per department
+- [ ] **Streaming responses** — Groq streaming support via LangChain for real-time chat feel
 
 ### Long-Term
-- [ ] **Web UI (`frontend/`)** — chat interface with role selector
-- [ ] **Multi-tenant support** — separate vector collections per department
-- [ ] **Streaming responses** — Groq streaming support via LangChain
 - [ ] **Evaluation harness** — RAG faithfulness + relevance scoring (RAGAS or custom)
+- [ ] **Deployment** — Dockerise Flask API + React build; deploy to cloud (Render, Railway, or GCP)
 
 ---
 
@@ -147,7 +196,15 @@ Full list in [`requirements.txt`](requirements.txt). Key packages:
 | `chromadb` | Local vector database |
 | `sentence-transformers` | Embedding model weights |
 | `python-dotenv` | `.env` file loading |
-| `flask` + `flask-cors` | (Planned) REST API server |
+| `flask` + `flask-cors` | REST API server |
+
+**Frontend** (`frontend_react/package.json`):
+
+| Package | Purpose |
+|---|---|
+| `react` + `react-dom` 18 | UI framework |
+| `react-scripts` 5 | CRA build tooling |
+| `axios` | HTTP client for API calls |
 
 ---
 
@@ -165,7 +222,7 @@ Copy `.env.example` → `.env` and fill in the values. **Never commit `.env`.**
 
 - **Remote:** GitHub — `AnurejT/Secure-Enterprise-RAG-System-with-Role-Based-Access-Control-Guardrails-and-Monitoring`
 - **Branch:** `main`
-- **Git-ignored:** `venv/`, `vector_db/`, `.env`, `__pycache__/`, `.cache/`, `*.log`
+- **Git-ignored:** `venv/`, `vector_db/`, `.env`, `__pycache__/`, `.cache/`, `*.log`, `node_modules/`
 - **Large file fix:** venv was accidentally tracked and pushed; fixed by removing from Git history and updating `.gitignore`
 
 ---
@@ -176,6 +233,14 @@ Copy `.env.example` → `.env` and fill in the values. **Never commit `.env`.**
 > Types: `FEAT` | `FIX` | `REFACTOR` | `DOCS` | `DEVOPS` | `CHORE`
 
 ---
+
+### 2026-04-18
+
+- `[FEAT]` Built REST API layer (`api/app.py`, `api/routes.py`) — Flask + CORS, Blueprint routing, `POST /api/query` and `POST /api/upload` endpoints — Antigravity Agent
+- `[FEAT]` Implemented `guardrails/filters.py` — input guardrail (malicious query, irrelevant query, length limit), context guardrail, and output constraint enforcement — Antigravity Agent
+- `[REFACTOR]` Updated `services/rag_service.py` to integrate input guardrail as Step 1 of pipeline; returns structured `{ answer, sources }` JSON — Antigravity Agent
+- `[FEAT]` Built React 18 Web UI (`frontend_react/`) — role selector sidebar, chat message area with typing indicator, source chips, role-gated drag-and-drop PDF uploader, polished CSS — Antigravity Agent
+- `[DOCS]` Updated `AGENT.md` to reflect Phase 4–6 completions, revised Known Issues table, updated roadmap — Antigravity Agent
 
 ### 2026-04-17
 
@@ -204,4 +269,4 @@ Copy `.env.example` → `.env` and fill in the values. **Never commit `.env`.**
 
 ---
 
-*Last updated: 2026-04-17 by Antigravity Agent*
+*Last updated: 2026-04-18 by Antigravity Agent*
