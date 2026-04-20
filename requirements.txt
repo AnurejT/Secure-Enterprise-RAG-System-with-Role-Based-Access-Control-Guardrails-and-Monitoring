@@ -14,3 +14,8 @@ flask-cors
 flask-sqlalchemy
 flask-bcrypt
 pyjwt
+# Phase 7: Monitoring & Evaluation
+ragas
+langsmith
+openai
+datasets

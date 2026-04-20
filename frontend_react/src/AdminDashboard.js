@@ -31,11 +31,248 @@ const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard",       icon: "🏠" },
   { id: "chat",      label: "Query Assistant", icon: "💬" },
   { id: "files",     label: "Manage Files",    icon: "🗂️" },
-  { id: "analytics", label: "Analytics",       icon: "📊", soon: true },
+  { id: "monitoring",label: "Monitoring",      icon: "📊" },
   { id: "settings",  label: "Settings",        icon: "⚙️",  soon: true },
 ];
 
-// ─── File size formatter ──────────────────────────────────────────
+// ─── Score progress bar ─────────────────────────────────────────
+function ScoreBar({ label, value, color }) {
+  const pct = value != null ? Math.round(value * 100) : null;
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-sm font-medium text-gray-700">{label}</span>
+        <span className="text-sm font-bold" style={{ color }}>
+          {pct != null ? `${pct}%` : "—"}
+        </span>
+      </div>
+      <div className="w-full bg-gray-100 rounded-full h-2.5">
+        <div
+          className="h-2.5 rounded-full transition-all duration-500"
+          style={{ width: pct != null ? `${pct}%` : "0%", background: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Monitoring Panel ─────────────────────────────────────────────
+function MonitoringPanel() {
+  const [metrics, setMetrics]   = useState(null);
+  const [history, setHistory]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [lastRefresh, setLastRefresh] = useState(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [mRes, hRes] = await Promise.all([
+        axios.get(`${API}/monitoring/metrics`),
+        axios.get(`${API}/monitoring/history?n=15`),
+      ]);
+      setMetrics(mRes.data);
+      setHistory(hRes.data.history || []);
+      setLastRefresh(new Date().toLocaleTimeString());
+    } catch {
+      // backend may not have monitoring yet
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 30_000); // auto-refresh every 30s
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const ragas  = metrics?.ragas  || {};
+  const tokens = metrics?.tokens || {};
+
+  const scoreColor = (v) => {
+    if (v == null) return "#9ca3af";
+    if (v >= 0.75) return "#10b981";
+    if (v >= 0.5)  return "#f59e0b";
+    return "#ef4444";
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-1">Monitoring & Evaluation</h2>
+          <p className="text-sm text-gray-500">Live Ragas metrics, token usage, and query traces</p>
+        </div>
+        <button
+          onClick={fetchData}
+          className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-100 font-medium transition-all"
+        >
+          🔄 Refresh {lastRefresh && <span className="text-gray-400">· {lastRefresh}</span>}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-20 gap-3 text-gray-400">
+          <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+          </svg>
+          <span className="text-sm">Loading metrics…</span>
+        </div>
+      ) : (
+        <>
+          {/* ── Top stat chips ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[
+              { label: "Total Queries",    value: ragas.total_queries ?? 0,                        icon: "🔍", color: "#3b82f6", bg: "#eff6ff" },
+              { label: "Total Tokens",     value: tokens.total_tokens?.toLocaleString() ?? "0",    icon: "⚡", color: "#8b5cf6", bg: "#f5f3ff" },
+              { label: "Est. Cost (USD)",  value: `$${tokens.total_cost_usd?.toFixed(5) ?? "0.00000"}`, icon: "💰", color: "#10b981", bg: "#ecfdf5" },
+              { label: "LLM Calls",        value: tokens.call_count ?? 0,                          icon: "📡", color: "#f59e0b", bg: "#fffbeb" },
+            ].map((s) => (
+              <div key={s.label} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl mb-3" style={{ background: s.bg }}>{s.icon}</div>
+                <div className="text-xl font-extrabold text-gray-900">{s.value}</div>
+                <div className="text-xs font-semibold text-gray-500 mt-0.5">{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Ragas scores ── */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <h3 className="font-bold text-gray-900 mb-1">📈 Ragas Quality Scores</h3>
+              <p className="text-xs text-gray-400 mb-5">Averaged across all evaluated queries · Auto-updated after each response</p>
+              {ragas.total_queries === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <div className="text-3xl mb-2">🧪</div>
+                  <p className="text-sm">No queries evaluated yet.</p>
+                  <p className="text-xs mt-1">Ask a question in the Query Assistant to generate metrics.</p>
+                </div>
+              ) : (
+                <>
+                  <ScoreBar label="Answer Relevancy"  value={ragas.avg_answer_relevancy}  color={scoreColor(ragas.avg_answer_relevancy)} />
+                  <ScoreBar label="Faithfulness"       value={ragas.avg_faithfulness}      color={scoreColor(ragas.avg_faithfulness)} />
+                  <ScoreBar label="Context Relevancy"  value={ragas.avg_context_relevancy} color={scoreColor(ragas.avg_context_relevancy)} />
+                  <p className="text-xs text-gray-400 mt-4">Based on {ragas.total_queries} evaluated queries</p>
+                </>
+              )}
+            </div>
+
+            {/* ── Token breakdown ── */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <h3 className="font-bold text-gray-900 mb-1">💰 Token Usage & Cost</h3>
+              <p className="text-xs text-gray-400 mb-5">Groq llama-3.1-8b-instant · Resets on server restart</p>
+              <div className="space-y-3">
+                {[
+                  { label: "Prompt Tokens",     value: tokens.prompt_tokens?.toLocaleString()     ?? "0", color: "#6366f1" },
+                  { label: "Completion Tokens", value: tokens.completion_tokens?.toLocaleString() ?? "0", color: "#10b981" },
+                  { label: "Total Tokens",      value: tokens.total_tokens?.toLocaleString()      ?? "0", color: "#3b82f6" },
+                ].map((t) => (
+                  <div key={t.label} className="flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50">
+                    <span className="text-sm font-medium text-gray-700">{t.label}</span>
+                    <span className="text-sm font-bold" style={{ color: t.color }}>{t.value}</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-green-50 border border-green-100">
+                  <span className="text-sm font-semibold text-green-800">Estimated Cost</span>
+                  <span className="text-sm font-bold text-green-700">${tokens.total_cost_usd?.toFixed(6) ?? "0.000000"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Per-role breakdown ── */}
+          {ragas.by_role && Object.keys(ragas.by_role).length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-6 py-5 border-b border-gray-50">
+                <h3 className="font-bold text-gray-900">Role-Level Breakdown</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Ragas averages per department</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left">Role</th>
+                      <th className="px-6 py-3 text-center">Queries</th>
+                      <th className="px-6 py-3 text-center">Answer Relevancy</th>
+                      <th className="px-6 py-3 text-center">Faithfulness</th>
+                      <th className="px-6 py-3 text-center">Context Relevancy</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {Object.entries(ragas.by_role).map(([role, d]) => {
+                      const fmt = (v) => v != null ? `${Math.round(v * 100)}%` : "—";
+                      return (
+                        <tr key={role} className="hover:bg-gray-50/60">
+                          <td className="px-6 py-3"><code className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-mono">{role}</code></td>
+                          <td className="px-6 py-3 text-center font-semibold text-gray-700">{d.count}</td>
+                          <td className="px-6 py-3 text-center" style={{ color: scoreColor(d.avg_answer_relevancy) }}>{fmt(d.avg_answer_relevancy)}</td>
+                          <td className="px-6 py-3 text-center" style={{ color: scoreColor(d.avg_faithfulness) }}>{fmt(d.avg_faithfulness)}</td>
+                          <td className="px-6 py-3 text-center" style={{ color: scoreColor(d.avg_context_relevancy) }}>{fmt(d.avg_context_relevancy)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Query history ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-50">
+              <h3 className="font-bold text-gray-900">🔎 Recent Query Traces</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Last 15 evaluated queries — newest first</p>
+            </div>
+            {history.length === 0 ? (
+              <div className="text-center py-10 text-gray-400">
+                <div className="text-3xl mb-2">📭</div>
+                <p className="text-sm">No query traces yet.</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-50">
+                {history.map((h, i) => {
+                  const fmt = (v) => v != null ? `${Math.round(v * 100)}%` : "—";
+                  const c   = (v) => v != null ? scoreColor(v) : "#9ca3af";
+                  return (
+                    <li key={i} className="px-6 py-4 hover:bg-gray-50/60 transition-colors">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800 truncate">{h.query_preview}</p>
+                          <p className="text-xs text-gray-400 mt-0.5 truncate">{h.answer_preview}</p>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0 text-xs">
+                          <code className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-mono">{h.role}</code>
+                          {h.total_tokens != null && (
+                            <span className="text-gray-400">{h.total_tokens}tok</span>
+                          )}
+                          {h.latency_ms != null && (
+                            <span className="text-gray-400">{Math.round(h.latency_ms)}ms</span>
+                          )}
+                        </div>
+                      </div>
+                      {!h.ragas_error && (
+                        <div className="flex gap-4 mt-2">
+                          <span style={{ color: c(h.answer_relevancy) }} className="text-xs font-medium">AR: {fmt(h.answer_relevancy)}</span>
+                          <span style={{ color: c(h.faithfulness) }} className="text-xs font-medium">FF: {fmt(h.faithfulness)}</span>
+                          <span style={{ color: c(h.context_relevancy) }} className="text-xs font-medium">CR: {fmt(h.context_relevancy)}</span>
+                          <span className="text-xs text-gray-300">{h.timestamp?.slice(11, 19)} UTC</span>
+                        </div>
+                      )}
+                      {h.ragas_error && (
+                        <p className="text-xs text-amber-500 mt-1">⚠️ Eval pending or failed: {h.ragas_error?.slice(0, 60)}</p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function fmtSize(kb) {
   if (kb >= 1024) return `${(kb / 1024).toFixed(1)} MB`;
   return `${kb} KB`;
@@ -288,7 +525,11 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
-  const pageTitle = { dashboard: "Admin Dashboard", files: "Manage Files" }[activeNav] ?? "Admin Dashboard";
+  const pageTitle = {
+    dashboard:  "Admin Dashboard",
+    files:      "Manage Files",
+    monitoring: "Monitoring & Evaluation",
+  }[activeNav] ?? "Admin Dashboard";
 
   return (
     <div className="flex min-h-screen bg-gray-50 font-sans">
@@ -384,6 +625,13 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
         {activeNav === "files" && (
           <div className="px-8 py-8">
             <FileManagerPanel />
+          </div>
+        )}
+
+        {/* ── Monitoring view ── */}
+        {activeNav === "monitoring" && (
+          <div className="px-8 py-8">
+            <MonitoringPanel />
           </div>
         )}
 

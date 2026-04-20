@@ -4,6 +4,8 @@ from flask_cors import CORS
 from extensions import db, bcrypt
 from api.routes import api_routes
 from api.auth import auth_bp
+from api.monitoring_routes import monitoring_bp
+from monitoring.langsmith_tracer import configure_langsmith
 
 app = Flask(__name__)
 CORS(app)
@@ -17,9 +19,13 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
 bcrypt.init_app(app)
 
+# ─── Enable LangSmith tracing (if LANGCHAIN_API_KEY is set in .env) ──────────
+configure_langsmith()
+
 # ─── Blueprints ───────────────────────────────────────────────────────────────
-app.register_blueprint(api_routes, url_prefix="/api")
-app.register_blueprint(auth_bp, url_prefix="/api/auth")
+app.register_blueprint(api_routes,   url_prefix="/api")
+app.register_blueprint(auth_bp,      url_prefix="/api/auth")
+app.register_blueprint(monitoring_bp, url_prefix="/api/monitoring")
 
 # ─── Create tables on first run ───────────────────────────────────────────────
 with app.app_context():

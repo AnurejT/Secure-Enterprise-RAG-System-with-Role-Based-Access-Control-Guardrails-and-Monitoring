@@ -1,111 +1,106 @@
+# services/rag_service.py
+
 from rag.retriever import get_relevant_docs
 from rag.llm import get_llm_response
 from rbac.access_control import filter_docs_by_role
-from guardrails.filters import input_guardrail
+
+
+# 🔥 Query Rewriting
+def rewrite_query(query):
+    prompt = f"""
+Convert the question into a factual search query.
+
+Examples:
+"Can audits be skipped?" → audit mandatory financial compliance
+"Can salary be processed before the 1st?" → salary processing policy date
+"Can expenses be reimbursed without receipts?" → expense reimbursement receipt requirement
+
+Query: {query}
+Rewritten:
+"""
+    result = get_llm_response(prompt)
+    rewritten = result["content"].strip()
+
+    print("\n[RAG] Rewritten Query:", rewritten)
+
+    return rewritten
 
 
 def process_query(user_query, role="employee"):
-    """
-    Main RAG pipeline service:
-    Retriever → RBAC → Guardrails → LLM
-    """
+    print("\n==============================")
+    print("[RAG] USER QUERY:", user_query)
+    print("[RAG] ROLE:", role)
+    print("==============================")
 
-    # ---------------------------
-    # 1. INPUT GUARDRAIL
-    # ---------------------------
-    if not input_guardrail(user_query):
-        return {
-            "answer": "Request blocked by security guardrails.",
-            "sources": []
-        }
+    # 🔥 STEP 1: Rewrite query
+    rewritten_query = rewrite_query(user_query)
 
-    # ---------------------------
-    # 2. RETRIEVE DOCUMENTS
-    # ---------------------------
-    docs = get_relevant_docs(user_query)
+    # 🔥 STEP 2: Hybrid retrieval
+    docs1 = get_relevant_docs(user_query)
+    docs2 = get_relevant_docs(rewritten_query)
+
+    docs = docs1 + docs2
 
     if not docs:
         return {
-            "answer": "No information available",
+            "answer": "No information available.",
             "sources": []
         }
 
-    # ---------------------------
-    # 3. RBAC FILTER (IMPORTANT FIX)
-    # ---------------------------
+    # 🔐 STEP 3: RBAC
     docs = filter_docs_by_role(docs, role)
 
     if not docs:
         return {
-            "answer": "You do not have access to this information.",
+            "answer": "No information available for your role.",
             "sources": []
         }
 
-    # ---------------------------
-    # 4. FORMAT CONTEXT SAFELY
-    # ---------------------------
-    context = "\n\n".join(
-        [
-            getattr(doc, "page_content", str(doc))
-            for doc in docs
-        ]
-    )
+    print(f"\n[RBAC] Doc count after filter: {len(docs)}")
 
-    # ---------------------------
-    # 5. BUILD PROMPT
-    # ---------------------------
-    if role.lower() == "admin":
-        # Admin has full unrestricted access across all departments
-        prompt = f"""
-You are an enterprise AI assistant with full administrative access to all departments.
+    # 🔥 STEP 4: Remove duplicates
+    seen = set()
+    unique_docs = []
 
-RULES:
-- Answer using the provided context from any department.
-- Be comprehensive and accurate.
-- If the answer is not in the context, say "No information available."
-- Do NOT guess or hallucinate.
+    for d in docs:
+        text = d.page_content.strip()
+        if text not in seen:
+            seen.add(text)
+            unique_docs.append(d)
 
-CONTEXT (all departments):
+    docs = unique_docs
+
+    # 🔥 STEP 5: Context
+    context = "\n\n".join([d.page_content for d in docs])
+
+    print("\n[RAG] FINAL CONTEXT:\n")
+    print(context[:1000])
+
+    # FINAL PROMPT — strictly grounded, no hallucination
+    prompt = f"""You are a secure enterprise AI assistant.
+
+RULES (follow strictly):
+1. Answer ONLY from the context provided below.
+2. Do NOT use any outside knowledge or make assumptions.
+3. Do NOT infer, guess, or fabricate information not explicitly stated.
+4. If the context does not contain the answer, respond with exactly:
+   "No information available in the documents accessible to your role."
+5. Do NOT explain what you cannot do. Just answer or say the phrase above.
+
+Context:
 {context}
 
-QUESTION: {user_query}
+Question: {user_query}
 
-ANSWER:
-"""
-    else:
-        # Non-admin: strictly scoped to their department only
-        prompt = f"""
-You are a secure enterprise AI assistant with strict role-based access control.
+Answer:"""
 
-STRICT RULES:
-- Answer ONLY using the provided context below.
-- The user's role is: {role.upper()}. Only answer questions relevant to this role/department.
-- If the context contains information from a DIFFERENT department, IGNORE it and say "No information available for your role."
-- Do NOT guess, hallucinate, or use general knowledge outside the context.
-- Do NOT reveal information from other departments.
+    llm_result = get_llm_response(prompt)
 
-ROLE: {role}
+    answer = llm_result["content"]
 
-CONTEXT (filtered to {role} department):
-{context}
+    print("\n[RAG] ANSWER:\n", answer)
 
-QUESTION: {user_query}
-
-ANSWER (strictly from {role} context only):
-"""
-
-
-    # ---------------------------
-    # 6. GENERATE RESPONSE
-    # ---------------------------
-    answer = get_llm_response(prompt)
-
-    # ---------------------------
-    # 7. RETURN RESPONSE
-    # ---------------------------
     return {
         "answer": answer,
-        "sources": [
-            getattr(doc, "metadata", {}) for doc in docs
-        ]
+        "sources": [d.metadata for d in docs]
     }

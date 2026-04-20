@@ -1,32 +1,28 @@
 def rbac_filter(documents, user_role):
-    """
-    Filters documents based on user role.
-    Admin bypasses all filters and sees every document.
-    If no role_allowed metadata is set, the doc is accessible to all.
-    """
-    # ── Admin sees everything ────────────────────────────────────────────────
-    if user_role.lower() == "admin":
+    user_role = user_role.lower()
+
+    print(f"\n[RBAC] Filtering for role: {user_role}")
+
+    if user_role == "admin":
         return documents
 
     filtered_docs = []
 
     for doc in documents:
-        allowed_roles = doc.metadata.get("role_allowed", [])
+        roles = [r.lower() for r in doc.metadata.get("role_allowed", [])]
 
-        # If no restriction set, allow all
-        if not allowed_roles:
+        print("DOC ROLES:", roles)
+
+        if "all" in roles:
             filtered_docs.append(doc)
             continue
 
-        # Normalize
-        allowed_roles = [r.lower() for r in allowed_roles]
-
-        if user_role.lower() in allowed_roles or "all" in allowed_roles:
+        if user_role in roles:
             filtered_docs.append(doc)
+
+    print("FINAL DOC COUNT:", len(filtered_docs))
 
     return filtered_docs
 
 
-
-# Alias used by rag_service.py
 filter_docs_by_role = rbac_filter
