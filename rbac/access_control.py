@@ -1,28 +1,28 @@
-def rbac_filter(documents, user_role):
+# rbac/access_control.py
+
+def filter_docs_by_role(documents, user_role):
     user_role = user_role.lower()
 
-    print(f"\n[RBAC] Filtering for role: {user_role}")
+    print(f"\n[RBAC] User Role: {user_role}")
 
+    # Admin → full access
     if user_role == "admin":
         return documents
 
-    filtered_docs = []
+    filtered = []
 
     for doc in documents:
-        roles = [r.lower() for r in doc.metadata.get("role_allowed", [])]
+        roles = doc.metadata.get("role_allowed", [])
+        dept = doc.metadata.get("department")
 
-        print("DOC ROLES:", roles)
-
-        if "all" in roles:
-            filtered_docs.append(doc)
-            continue
-
+        # ✅ Allow if role matches
         if user_role in roles:
-            filtered_docs.append(doc)
+            filtered.append(doc)
 
-    print("FINAL DOC COUNT:", len(filtered_docs))
+        # 🔥 Backup: allow department match
+        elif dept == user_role:
+            filtered.append(doc)
 
-    return filtered_docs
+    print(f"[RBAC] Docs after filter: {len(filtered)}")
 
-
-filter_docs_by_role = rbac_filter
+    return filtered

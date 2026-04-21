@@ -5,37 +5,59 @@ from rag.llm import get_llm_response
 from rbac.access_control import filter_docs_by_role
 
 
-# 🔥 Query Rewriting
+# ─── QUERY CLASSIFIER (RULE-BASED) ─────────────
+def classify_query_role(query):
+    q = query.lower()
+
+    if any(w in q for w in ["$", "spend", "budget", "expense", "payment", "approval"]):
+        return "finance"
+
+    if any(w in q for w in ["salary", "employee", "leave"]):
+        return "hr"
+
+    if any(w in q for w in ["ads", "campaign", "marketing"]):
+        return "marketing"
+
+    if any(w in q for w in ["system", "software"]):
+        return "engineering"
+
+    return "general"
+
+
+# ─── QUERY REWRITE ───────────────────────────
 def rewrite_query(query):
     prompt = f"""
-Convert the question into a factual search query.
+Convert this question into search keywords.
 
-Examples:
-"Can audits be skipped?" → audit mandatory financial compliance
-"Can salary be processed before the 1st?" → salary processing policy date
-"Can expenses be reimbursed without receipts?" → expense reimbursement receipt requirement
+Example:
+"Can a department spend more than $5000?"
+→ finance expense approval limit 5000 policy
 
-Query: {query}
-Rewritten:
+Query:
+{query}
+
+Answer:
 """
     result = get_llm_response(prompt)
     rewritten = result["content"].strip()
 
-    print("\n[RAG] Rewritten Query:", rewritten)
+    print("[REWRITE]:", rewritten)
 
     return rewritten
 
 
+# ─── MAIN PIPELINE ───────────────────────────
 def process_query(user_query, role="employee"):
+
     print("\n==============================")
-    print("[RAG] USER QUERY:", user_query)
-    print("[RAG] ROLE:", role)
+    print("[QUERY]:", user_query)
+    print("[USER ROLE]:", role)
     print("==============================")
 
-    # 🔥 STEP 1: Rewrite query
+    # 1️⃣ Rewrite query
     rewritten_query = rewrite_query(user_query)
 
-    # 🔥 STEP 2: Hybrid retrieval
+    # 2️⃣ Retrieve documents
     docs1 = get_relevant_docs(user_query)
     docs2 = get_relevant_docs(rewritten_query)
 
@@ -43,22 +65,32 @@ def process_query(user_query, role="employee"):
 
     if not docs:
         return {
-            "answer": "No information available.",
+            "answer": "No information available in the documents accessible to your role.",
             "sources": []
         }
 
-    # 🔐 STEP 3: RBAC
+    # DEBUG BEFORE RBAC
+    print("\n[BEFORE RBAC]")
+    for d in docs[:5]:
+        print(d.page_content[:100])
+        print("DEPT:", d.metadata.get("department"))
+
+    # 3️⃣ RBAC FILTER
     docs = filter_docs_by_role(docs, role)
 
     if not docs:
         return {
-            "answer": "No information available for your role.",
+            "answer": "No information available in the documents accessible to your role.",
             "sources": []
         }
 
-    print(f"\n[RBAC] Doc count after filter: {len(docs)}")
+    # DEBUG AFTER RBAC
+    print("\n[AFTER RBAC]")
+    for d in docs[:5]:
+        print(d.page_content[:100])
+        print("DEPT:", d.metadata.get("department"))
 
-    # 🔥 STEP 4: Remove duplicates
+    # 4️⃣ Remove duplicates
     seen = set()
     unique_docs = []
 
@@ -68,37 +100,37 @@ def process_query(user_query, role="employee"):
             seen.add(text)
             unique_docs.append(d)
 
-    docs = unique_docs
+    docs = unique_docs[:5]
 
-    # 🔥 STEP 5: Context
+    # 5️⃣ Context
     context = "\n\n".join([d.page_content for d in docs])
 
-    print("\n[RAG] FINAL CONTEXT:\n")
-    print(context[:1000])
+    print("\n[FINAL CONTEXT]\n", context[:800])
 
-    # FINAL PROMPT — strictly grounded, no hallucination
-    prompt = f"""You are a secure enterprise AI assistant.
+    # 6️⃣ LLM Answer
+    prompt = f"""
+You are a secure enterprise AI assistant.
 
-RULES (follow strictly):
-1. Answer ONLY from the context provided below.
-2. Do NOT use any outside knowledge or make assumptions.
-3. Do NOT infer, guess, or fabricate information not explicitly stated.
-4. If the context does not contain the answer, respond with exactly:
-   "No information available in the documents accessible to your role."
-5. Do NOT explain what you cannot do. Just answer or say the phrase above.
+RULES:
+- Answer ONLY from context
+- Do NOT assume anything
+- If not found, reply EXACTLY:
+"No information available in the documents accessible to your role."
 
 Context:
 {context}
 
-Question: {user_query}
+Question:
+{user_query}
 
-Answer:"""
+Answer:
+"""
 
-    llm_result = get_llm_response(prompt)
+    result = get_llm_response(prompt)
+    answer = result["content"].strip()
 
-    answer = llm_result["content"]
-
-    print("\n[RAG] ANSWER:\n", answer)
+    if "no information" in answer.lower():
+        answer = "No information available in the documents accessible to your role."
 
     return {
         "answer": answer,

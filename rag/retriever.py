@@ -11,7 +11,7 @@ def get_relevant_docs(query):
     print("\n[RETRIEVER] ORIGINAL QUERY:", query)
 
     # ─── STEP 1: Semantic Search ───────────────────────────────
-    docs = vector_db.similarity_search(query, k=10)
+    docs = vector_db.similarity_search(query, k=15)
 
     # ─── STEP 2: Keyword Boost (IMPROVED) ───────────────────
     keyword_docs = []
