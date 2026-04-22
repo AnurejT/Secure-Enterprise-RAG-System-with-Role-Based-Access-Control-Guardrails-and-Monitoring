@@ -3,14 +3,6 @@ import axios from "axios";
 
 const API = "http://localhost:5000/api/auth";
 
-// ─── Employee department options ─────────────────────────────────
-const DEPARTMENTS = [
-  { value: "employee",  label: "Employee",  icon: "👤", color: "#6366f1", bgLight: "#ede9fe", textColor: "#4f46e5" },
-  { value: "finance",   label: "Finance",   icon: "💰", color: "#10b981", bgLight: "#d1fae5", textColor: "#059669" },
-  { value: "hr",        label: "HR",        icon: "🧑‍💼", color: "#8b5cf6", bgLight: "#ede9fe", textColor: "#7c3aed" },
-  { value: "marketing", label: "Marketing", icon: "📣", color: "#f59e0b", bgLight: "#fef3c7", textColor: "#d97706" },
-];
-
 // ─── SVG Icons ────────────────────────────────────────────────────
 function LockCloudIcon() {
   return (
@@ -44,14 +36,14 @@ function AdminIcon() {
   );
 }
 
-function EmployeeIcon({ dept }) {
-  const bg = dept ? dept.color : "#6366f1";
+function EmployeeIcon() {
+  const bg = "#6366f1";
   return (
     <div
       className="w-20 h-20 rounded-full flex items-center justify-center shadow-lg mx-auto mb-5 transition-all duration-300"
       style={{ background: `linear-gradient(135deg, ${bg}cc, ${bg})` }}
     >
-      <span style={{ fontSize: 36 }}>{dept ? dept.icon : "👤"}</span>
+      <span style={{ fontSize: 36 }}>👤</span>
     </div>
   );
 }
@@ -88,77 +80,21 @@ function InputField({ id, label, type = "text", value, onChange, placeholder, er
   );
 }
 
-// ─── Department selector ─────────────────────────────────────────
-function DepartmentSelector({ selected, onSelect }) {
-  return (
-    <div className="mb-5">
-      <p className="text-sm font-semibold text-gray-700 mb-2.5">Select Your Department</p>
-      <div className="grid grid-cols-2 gap-2.5">
-        {DEPARTMENTS.map((d) => {
-          const active = selected === d.value;
-          return (
-            <button
-              key={d.value}
-              type="button"
-              onClick={() => onSelect(d.value)}
-              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 text-sm font-medium
-                transition-all duration-200 hover:scale-[1.03] active:scale-95`}
-              style={{
-                borderColor: active ? d.color : "#e5e7eb",
-                background: active ? d.bgLight : "#f9fafb",
-                color: active ? d.textColor : "#6b7280",
-                boxShadow: active ? `0 0 0 3px ${d.color}22` : "none",
-              }}
-            >
-              <span style={{ fontSize: 18 }}>{d.icon}</span>
-              <span>{d.label}</span>
-              {active && (
-                <span className="ml-auto" style={{ color: d.textColor }}>✓</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─── Auth card (handles both Sign In and Sign Up) ─────────────────
+// ─── Auth card ───────────────────────────────────────────────────
 function AuthCard({ type, onLogin }) {
   const isAdmin = type === "admin";
 
-  const [mode, setMode]         = useState("signin"); // "signin" | "signup"
-  const [name, setName]         = useState("");
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm]   = useState("");
-  const [dept, setDept]         = useState("employee");
   const [errors, setErrors]     = useState({});
   const [loading, setLoading]   = useState(false);
   const [shake, setShake]       = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
-
-  const isSignUp = mode === "signup";
-  const selectedDept = DEPARTMENTS.find((d) => d.value === dept);
-
-  const resetForm = () => {
-    setName(""); setEmail(""); setPassword(""); setConfirm("");
-    setDept("employee"); setErrors({}); setSuccessMsg("");
-  };
-
-  const switchMode = (newMode) => {
-    resetForm();
-    setMode(newMode);
-  };
 
   const validate = () => {
     const e = {};
-    if (isSignUp && !name.trim()) e.name = "Full name is required";
     if (!email.trim()) e.email = "Email is required";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "Enter a valid email";
     if (!password) e.password = "Password is required";
-    else if (isSignUp && password.length < 6) e.password = "Must be at least 6 characters";
-    if (isSignUp && password !== confirm) e.confirm = "Passwords do not match";
     return e;
   };
 
@@ -175,27 +111,11 @@ function AuthCard({ type, onLogin }) {
     setErrors({});
     setLoading(true);
     try {
-      if (isSignUp) {
-        const payload = {
-          name: name.trim(),
-          email: email.trim().toLowerCase(),
-          password,
-          role: isAdmin ? "admin" : "employee",
-          department: isAdmin ? "admin" : dept,
-        };
-        const res = await axios.post(`${API}/register`, payload);
-        setSuccessMsg("Account created! You can now sign in.");
-        setLoading(false);
-        setTimeout(() => switchMode("signin"), 1500);
-        // Auto-login after signup
-        onLogin({ ...res.data.user, token: res.data.token });
-      } else {
-        const res = await axios.post(`${API}/login`, {
-          email: email.trim().toLowerCase(),
-          password,
-        });
-        onLogin({ ...res.data.user, token: res.data.token });
-      }
+      const res = await axios.post(`${API}/login`, {
+        email: email.trim().toLowerCase(),
+        password,
+      });
+      onLogin({ ...res.data.user, token: res.data.token });
     } catch (err) {
       setLoading(false);
       const msg = err.response?.data?.error || "Something went wrong. Please try again.";
@@ -205,8 +125,6 @@ function AuthCard({ type, onLogin }) {
 
   const accentColor = isAdmin
     ? { from: "#2563eb", to: "#4338ca" }
-    : selectedDept
-    ? { from: selectedDept.color + "cc", to: selectedDept.color }
     : { from: "#6366f1", to: "#4f46e5" };
 
   return (
@@ -216,73 +134,21 @@ function AuthCard({ type, onLogin }) {
         ${shake ? "animate-shake" : ""}`}
       style={{ minWidth: 300, overflow: "hidden" }}
     >
-      {/* Mode Tab Bar */}
-      <div className="flex border-b border-gray-100">
-        <button
-          type="button"
-          onClick={() => switchMode("signin")}
-          className={`flex-1 py-3.5 text-sm font-semibold transition-all duration-200 ${
-            !isSignUp
-              ? "text-blue-600 border-b-2 border-blue-500 bg-blue-50/50"
-              : "text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          Sign In
-        </button>
-        <button
-          type="button"
-          onClick={() => switchMode("signup")}
-          className={`flex-1 py-3.5 text-sm font-semibold transition-all duration-200 ${
-            isSignUp
-              ? "text-blue-600 border-b-2 border-blue-500 bg-blue-50/50"
-              : "text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          Sign Up
-        </button>
-      </div>
+      {/* Removed Mode Tab Bar (Sign In / Sign Up) */}
 
       <div className="p-8">
-        {/* Icon */}
-        {isAdmin ? <AdminIcon /> : <EmployeeIcon dept={selectedDept} />}
+        {isAdmin ? <AdminIcon /> : <EmployeeIcon />}
 
         {/* Title */}
         <h2 className="text-xl font-bold text-center mb-1 text-gray-900">
-          {isSignUp
-            ? isAdmin ? "Create Admin Account" : "Create Employee Account"
-            : isAdmin ? "Admin Sign In" : "Employee Sign In"}
+          {isAdmin ? "Admin Sign In" : "Employee Sign In"}
         </h2>
         <p className="text-center text-xs text-gray-400 mb-5">
-          {isSignUp
-            ? isAdmin ? "Set up admin access to manage the system" : "Join the enterprise knowledge platform"
-            : isAdmin ? "Full system access & management" : "Access your department knowledge base"}
+          {isAdmin ? "Full system access & management" : "Access your department knowledge base"}
         </p>
 
-        {/* Department selector — employee sign-up only */}
-        {!isAdmin && isSignUp && (
-          <DepartmentSelector selected={dept} onSelect={setDept} />
-        )}
-
-        {/* Success message */}
-        {successMsg && (
-          <div className="mb-4 text-sm text-green-700 bg-green-50 border border-green-200 px-4 py-2.5 rounded-xl text-center">
-            ✅ {successMsg}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} noValidate>
-          {/* Name — signup only */}
-          {isSignUp && (
-            <InputField
-              id={`${type}-name`}
-              label="Full Name"
-              value={name}
-              onChange={(e) => { setName(e.target.value); setErrors((p) => ({ ...p, name: "" })); }}
-              placeholder="Your full name"
-              error={errors.name}
-              autoComplete="name"
-            />
-          )}
 
           <InputField
             id={`${type}-email`}
@@ -295,77 +161,51 @@ function AuthCard({ type, onLogin }) {
             autoComplete="email"
           />
 
-          <InputField
-            id={`${type}-password`}
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => { setPassword(e.target.value); setErrors((p) => ({ ...p, password: "" })); }}
-            placeholder={isSignUp ? "At least 6 characters" : "Enter your password"}
-            error={errors.password}
-            autoComplete={isSignUp ? "new-password" : "current-password"}
-          />
-
-          {/* Confirm password — signup only */}
-          {isSignUp && (
             <InputField
-              id={`${type}-confirm`}
-              label="Confirm Password"
+              id={`${type}-password`}
+              label="Password"
               type="password"
-              value={confirm}
-              onChange={(e) => { setConfirm(e.target.value); setErrors((p) => ({ ...p, confirm: "" })); }}
-              placeholder="Re-enter your password"
-              error={errors.confirm}
-              autoComplete="new-password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setErrors((p) => ({ ...p, password: "" })); }}
+              placeholder="Enter your password"
+              error={errors.password}
+              autoComplete="current-password"
             />
-          )}
 
-          {errors.form && (
-            <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-2.5 rounded-xl text-center">
-              {errors.form}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full py-3.5 rounded-xl font-semibold text-white text-sm
-              shadow-md hover:shadow-lg transition-all duration-200 active:scale-95
-              disabled:opacity-60 disabled:cursor-not-allowed
-              flex items-center justify-center gap-2 mt-1`}
-            style={{
-              background: `linear-gradient(135deg, ${accentColor.from}, ${accentColor.to})`,
-            }}
-          >
-            {loading ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                </svg>
-                {isSignUp ? "Creating account…" : "Signing in…"}
-              </>
-            ) : (
-              <>
-                {isSignUp
-                  ? isAdmin ? "🔐 Create Admin Account" : `${selectedDept?.icon} Create Account`
-                  : isAdmin ? "🔐 Sign In as Admin" : `${selectedDept?.icon} Sign In`}
-              </>
+            {errors.form && (
+              <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 px-4 py-2.5 rounded-xl text-center">
+                {errors.form}
+              </div>
             )}
-          </button>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full py-3.5 rounded-xl font-semibold text-white text-sm
+                shadow-md hover:shadow-lg transition-all duration-200 active:scale-95
+                disabled:opacity-60 disabled:cursor-not-allowed
+                flex items-center justify-center gap-2 mt-1`}
+              style={{
+                background: `linear-gradient(135deg, ${accentColor.from}, ${accentColor.to})`,
+              }}
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  Signing in…
+                </>
+              ) : (
+                <>
+                  {isAdmin ? "🔐 Sign In as Admin" : `👤 Sign In`}
+                </>
+              )}
+            </button>
         </form>
 
-        {/* Toggle hint at bottom */}
-        <p className="text-center text-xs text-gray-400 mt-5">
-          {isSignUp ? "Already have an account? " : "Don't have an account? "}
-          <button
-            type="button"
-            onClick={() => switchMode(isSignUp ? "signin" : "signup")}
-            className="text-blue-500 hover:underline font-semibold"
-          >
-            {isSignUp ? "Sign In" : "Sign Up"}
-          </button>
-        </p>
+        {/* Removed switch action */}
       </div>
     </div>
   );

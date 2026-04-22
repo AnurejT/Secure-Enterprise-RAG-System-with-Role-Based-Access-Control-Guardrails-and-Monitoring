@@ -6,7 +6,6 @@ import AdminDashboard from "./AdminDashboard";
 
 const API = "http://localhost:5000/api";
 
-// All roles — only admin can switch between them inside ChatApp
 const ROLES = [
   { value: "employee",  label: "👤 Employee",  color: "#6366f1", canUpload: false },
   { value: "finance",   label: "💰 Finance",   color: "#10b981", canUpload: true  },
@@ -18,13 +17,8 @@ const ROLES = [
 const ADMIN_ROLES    = ROLES;
 const EMPLOYEE_ROLES = ROLES.filter((r) => r.value !== "admin");
 
-// ─────────────────────────────────────────────
-// ChatApp — used by employees AND admin (via dashboard)
-// ─────────────────────────────────────────────
 function ChatApp({ user, onLogout, onBackToDashboard }) {
   const isAdmin = user.role === "admin";
-
-  // Employees: locked to their login role. Admins: can switch.
   const [role, setRole]           = useState(user.role);
   const [query, setQuery]         = useState("");
   const [messages, setMessages]   = useState([]);
@@ -32,30 +26,98 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadMsg, setUploadMsg] = useState("");
   const [dragOver, setDragOver]   = useState(false);
+  
   const fileInputRef = useRef(null);
   const chatEndRef   = useRef(null);
 
   const allowedRoles = isAdmin ? ADMIN_ROLES : EMPLOYEE_ROLES.filter((r) => r.value === user.role);
 
+  // 1. Fetch History on Mount
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const res = await axios.get(`${API}/history`, {
+          headers: { "Authorization": `Bearer ${user.token}` }
+        });
+        if (res.data.history) setMessages(res.data.history);
+      } catch (err) {
+        console.error("Failed to fetch history", err);
+      }
+    };
+    fetchHistory();
+  }, [user.token]);
+
+  // 2. Auto-scroll
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  // 3. Streaming Query Implementation
   const sendQuery = async () => {
     const trimmed = query.trim();
     if (!trimmed || loading) return;
-    setMessages((prev) => [...prev, { type: "user", text: trimmed }]);
+
+    // Add user message immediately
+    const userMsg = { type: "user", text: trimmed };
+    setMessages((prev) => [...prev, userMsg]);
     setQuery("");
     setLoading(true);
+
+    // Placeholder for bot message
+    let botMsg = { type: "bot", text: "", sources: [] };
+    setMessages((prev) => [...prev, botMsg]);
+
     try {
-      const res = await axios.post(`${API}/query`, { query: trimmed, role }, {
+      const response = await fetch(`${API}/query_stream`, {
+        method: "POST",
         headers: {
+          "Content-Type": "application/json",
           "Authorization": `Bearer ${user.token}`
-        }
+        },
+        body: JSON.stringify({ query: trimmed, role })
       });
-      setMessages((prev) => [...prev, { type: "bot", text: res.data.answer, sources: res.data.sources || [] }]);
-    } catch {
-      setMessages((prev) => [...prev, { type: "error", text: "⚠️ Failed to reach the server. Is the backend running?" }]);
+
+      if (!response.ok) throw new Error("Stream request failed");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        
+        // Handle final sources chunk
+        if (chunk.includes("SOURCES_JSON:")) {
+          const parts = chunk.split("SOURCES_JSON:");
+          fullText += parts[0];
+          try {
+            const sources = JSON.parse(parts[1]);
+            botMsg.sources = sources;
+          } catch (e) {
+            console.error("Failed to parse sources", e);
+          }
+        } else {
+          fullText += chunk;
+        }
+
+        // Update current bot message in state
+        botMsg.text = fullText;
+        setMessages((prev) => {
+          const newMsgs = [...prev];
+          newMsgs[newMsgs.length - 1] = { ...botMsg };
+          return newMsgs;
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      setMessages((prev) => {
+        const newMsgs = [...prev];
+        newMsgs[newMsgs.length - 1] = { type: "error", text: "⚠️ Connection lost or server error." };
+        return newMsgs;
+      });
     } finally {
       setLoading(false);
     }
@@ -67,12 +129,19 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
 
   const uploadFile = async (file) => {
     if (!file) return;
-    if (!file.name.endsWith(".pdf")) { setUploadStatus("error"); setUploadMsg("Only PDF files are supported."); return; }
+    const ALLOWED = [".pdf", ".docx", ".csv", ".xlsx", ".md"];
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+    if (!ALLOWED.includes(ext)) {
+      setUploadStatus("error");
+      setUploadMsg(`Unsupported file type: ${ext}. Supported: PDF, DOCX, CSV, XLSX`);
+      return;
+    }
+
     setUploadStatus("uploading");
     setUploadMsg(`Uploading "${file.name}"…`);
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("role", role); // 🔥 CRITICAL FIX: append role
+    formData.append("role", role);
 
     try {
       await axios.post(`${API}/upload`, formData, { 
@@ -94,47 +163,25 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
 
   return (
     <div className="app">
-      {/* SIDEBAR */}
       <aside className="sidebar">
         <div className="logo">
           <span className="logo-icon">🧠</span>
           <span className="logo-text">Enterprise<br /><b>RAG System</b></span>
         </div>
 
-        {/* Back to dashboard — admin only */}
         {isAdmin && onBackToDashboard && (
-          <button
-            onClick={onBackToDashboard}
-            style={{
-              display: "flex", alignItems: "center", gap: 8,
-              background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: 10, padding: "9px 14px", color: "rgba(255,255,255,0.7)",
-              fontSize: 13, cursor: "pointer", fontWeight: 500, transition: "all 0.2s",
-              width: "100%", marginBottom: 14,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
-          >
-            ← Dashboard
-          </button>
+          <button onClick={onBackToDashboard} className="back-btn">← Dashboard</button>
         )}
 
-        {/* User badge */}
-        <div style={{
-          background: "rgba(255,255,255,0.08)", borderRadius: 12,
-          padding: "10px 14px", marginBottom: 20,
-          display: "flex", alignItems: "center", gap: 10,
-        }}>
+        <div className="user-badge">
           <span style={{ fontSize: 22 }}>{isAdmin ? "🔐" : "👤"}</span>
           <div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>Logged in as</div>
-            <div style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>{user.email}</div>
+            <div className="user-badge-label">Logged in as</div>
+            <div className="user-badge-email">{user.email}</div>
           </div>
         </div>
 
-        {/* ROLE selector / locked display */}
         <div className="section-title">Access Role</div>
-
         {isAdmin ? (
           <div className="role-list">
             {allowedRoles.map((r) => (
@@ -149,110 +196,41 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
             ))}
           </div>
         ) : (
-          /* Employee: role locked to their department login */
-          <div style={{
-            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 10, padding: "10px 14px",
-            display: "flex", alignItems: "center", gap: 10,
-          }}>
-            <span style={{ fontSize: 18 }}>🔒</span>
-            <div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500, marginBottom: 2 }}>Role locked</div>
-              <div style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>
-                {selectedRole?.label ?? user.role}
-              </div>
-            </div>
+          <div className="locked-role">
+            <span>🔒</span> locked to {selectedRole?.label}
           </div>
         )}
 
-        {/* UPLOAD */}
         <div className="section-title" style={{ marginTop: 28 }}>Upload Document</div>
-
         {canUpload ? (
-          <>
-            <div
-              className={`drop-zone ${dragOver ? "drag-over" : ""} ${uploadStatus === "uploading" ? "uploading" : ""}`}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadFile(e.dataTransfer.files[0]); }}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input ref={fileInputRef} type="file" accept=".pdf" style={{ display: "none" }} onChange={(e) => uploadFile(e.target.files[0])} />
-              {uploadStatus === "uploading" ? (
-                <div className="upload-spinner"><div className="spinner" /><span>Processing...</span></div>
-              ) : (
-                <>
-                  <div className="upload-icon">📄</div>
-                  <div className="upload-label">{dragOver ? "Drop PDF here" : "Click or drag & drop PDF"}</div>
-                  <div className="upload-hint">PDF files only · Indexes into vector DB</div>
-                </>
-              )}
-            </div>
-            {uploadMsg && <div className={`upload-msg ${uploadStatus}`}>{uploadMsg}</div>}
-          </>
-        ) : (
-          <div className="upload-locked">
-            <div className="lock-icon">🔒</div>
-            <div className="lock-title">Access Restricted</div>
-            <div className="lock-sub">
-              {isAdmin
-                ? "Switch to a role with upload access above."
-                : "Employees cannot upload documents."}
-            </div>
+          <div
+            className={`drop-zone ${dragOver ? "drag-over" : ""} ${uploadStatus === "uploading" ? "uploading" : ""}`}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadFile(e.dataTransfer.files[0]); }}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <input ref={fileInputRef} type="file" accept=".pdf,.docx,.csv,.xlsx,.md" style={{ display: "none" }} onChange={(e) => uploadFile(e.target.files[0])} />
+            {uploadStatus === "uploading" ? "Processing..." : "Click or drag & drop PDF"}
           </div>
+        ) : (
+          <div className="upload-locked">🔒 Access Restricted</div>
         )}
-
-        <div className="sidebar-footer">
-          <span className="status-dot" />Backend connected
-        </div>
-
-        <button
-          onClick={onLogout}
-          style={{
-            marginTop: 10, width: "100%", padding: "9px 0",
-            background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 10, color: "rgba(255,255,255,0.6)", fontSize: 13,
-            cursor: "pointer", fontWeight: 500, transition: "all 0.2s",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.13)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
-        >
-          ← Logout
-        </button>
+        <div className="sidebar-footer">● Backend connected</div>
+        <button onClick={onLogout} className="logout-btn-sidebar">← Logout</button>
       </aside>
 
-      {/* CHAT AREA */}
       <main className="chat-area">
         <div className="chat-header">
-          <div>
-            <div className="chat-title">Ask your enterprise documents</div>
-            <div className="chat-subtitle">
-              Querying as&nbsp;
-              <span className="role-badge" style={{ background: selectedRole?.color }}>
-                {selectedRole?.label}
-              </span>
-            </div>
-          </div>
+          <div className="chat-title">Ask your enterprise documents</div>
+          <div className="chat-subtitle">Querying as <span className="role-badge" style={{ background: selectedRole?.color }}>{selectedRole?.label}</span></div>
         </div>
 
         <div className="messages">
-          {messages.length === 0 && (
-            <div className="empty-state">
-              <div className="empty-icon">💬</div>
-              <div className="empty-title">No messages yet</div>
-              <div className="empty-sub">
-                {canUpload
-                  ? "Upload a PDF in the sidebar → then ask questions about it"
-                  : "Ask questions about the enterprise knowledge base"}
-              </div>
-            </div>
-          )}
-
+          {messages.length === 0 && <div className="empty-state">💬 Ask something to start...</div>}
           {messages.map((m, i) => (
             <div key={i} className={`msg-row ${m.type}`}>
-              <div className="msg-avatar">
-                {m.type === "user" ? "👤" : m.type === "error" ? "⚠️" : "🤖"}
-              </div>
+              <div className="msg-avatar">{m.type === "user" ? "👤" : "🤖"}</div>
               <div className="msg-bubble">
                 <div className="msg-text">{m.text}</div>
                 {m.sources && m.sources.length > 0 && (
@@ -260,7 +238,7 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
                     <span className="sources-label">Sources:</span>
                     {m.sources.map((s, si) => (
                       <span key={si} className="source-chip">
-                        📎 {s.source ? s.source.split(/[/\\]/).pop() : `Chunk ${si + 1}`}
+                        📎 {s.source ? s.source.split(/[/\\]/).pop() : "Doc"} (Page {s.page || '?'})
                       </span>
                     ))}
                   </div>
@@ -268,78 +246,40 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
               </div>
             </div>
           ))}
-
-          {loading && (
-            <div className="msg-row bot">
-              <div className="msg-avatar">🤖</div>
-              <div className="msg-bubble typing"><span /><span /><span /></div>
-            </div>
+          {loading && !messages[messages.length-1]?.text && (
+            <div className="msg-row bot"><div className="msg-avatar">🤖</div><div className="msg-bubble typing"><span/><span/><span/></div></div>
           )}
           <div ref={chatEndRef} />
         </div>
 
-        {/* INPUT */}
         <div className="input-bar">
           <textarea
             className="input-field"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask something about your documents… (Enter to send)"
+            placeholder="Ask something..."
             rows={1}
             disabled={loading}
           />
-          <button className="send-btn" onClick={sendQuery} disabled={loading || !query.trim()}>
-            {loading ? <div className="btn-spinner" /> : "Send ↑"}
-          </button>
+          <button className="send-btn" onClick={sendQuery} disabled={loading || !query.trim()}>Send ↑</button>
         </div>
       </main>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────
-// Root App — routing state machine
-// ─────────────────────────────────────────────
 export default function App() {
-  const [user, setUser]         = useState(null);        // null = not logged in
-  const [adminPage, setAdminPage] = useState("dashboard"); // admin sub-page: "dashboard" | "chat"
+  const [user, setUser]         = useState(null);
+  const [adminPage, setAdminPage] = useState("dashboard");
 
-  const handleLogin = (userData) => {
-    setUser(userData);
-    setAdminPage("dashboard");
-  };
+  const handleLogin = (userData) => { setUser(userData); setAdminPage("dashboard"); };
+  const handleLogout = () => { setUser(null); setAdminPage("dashboard"); };
 
-  const handleLogout = () => {
-    setUser(null);
-    setAdminPage("dashboard");
-  };
-
-  // ── Not logged in ── show Login
-  if (!user) {
-    return <Login onLogin={handleLogin} />;
-  }
-
-  // ── Admin ── show Dashboard or Chat
+  if (!user) return <Login onLogin={handleLogin} />;
   if (user.role === "admin") {
-    if (adminPage === "chat") {
-      return (
-        <ChatApp
-          user={user}
-          onLogout={handleLogout}
-          onBackToDashboard={() => setAdminPage("dashboard")}
-        />
-      );
-    }
-    return (
-      <AdminDashboard
-        user={user}
-        onLogout={handleLogout}
-        onOpenChat={() => setAdminPage("chat")}
-      />
-    );
+    if (adminPage === "chat") return <ChatApp user={user} onLogout={handleLogout} onBackToDashboard={() => setAdminPage("dashboard")} />;
+    return <AdminDashboard user={user} onLogout={handleLogout} onOpenChat={() => setAdminPage("chat")} />;
   }
-
-  // ── Employee / Finance / HR / Marketing ── go straight to Chat
   return <ChatApp user={user} onLogout={handleLogout} onBackToDashboard={null} />;
 }

@@ -57,3 +57,22 @@ def get_llm_response(prompt: str, role: str = "unknown", query: str = "") -> dic
             "usage":      {},
             "latency_ms": 0,
         }
+
+def get_llm_stream(prompt: str, role: str = "unknown", query: str = ""):
+    """
+    Generator that yields chunks of content.
+    """
+    llm = get_llm()
+    t0 = time.time()
+    
+    try:
+        for chunk in llm.stream(prompt):
+            content = chunk.content
+            yield content
+            
+        latency_ms = round((time.time() - t0) * 1000, 1)
+        # Record usage if possible
+        token_tracker.record_usage({"total_tokens": 100}, role=role, query_preview=query)
+        
+    except Exception as e:
+        yield f"\n[Error in LLM Stream]: {str(e)}"

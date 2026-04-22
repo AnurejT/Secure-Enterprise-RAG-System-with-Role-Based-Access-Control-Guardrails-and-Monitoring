@@ -236,18 +236,27 @@ body {
 }
 
 .msg-bubble {
-  max-width: 70%;
+  max-width: 80%;
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 12px 16px;
-  font-size: 14px;
-  line-height: 1.6;
+  border-radius: 18px;
+  padding: 14px 20px;
+  font-size: 14.5px;
+  line-height: 1.65;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transition: transform 0.2s ease;
+}
+.msg-bubble:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,0.15);
 }
 .msg-row.user .msg-bubble {
-  background: color-mix(in srgb, var(--accent) 18%, var(--bg2));
+  background: linear-gradient(135deg, var(--accent), #4f52e0);
   border-color: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 4px 15px var(--accent-glow);
 }
+
 .msg-row.error .msg-bubble {
   background: rgba(239,68,68,0.08);
   border-color: rgba(239,68,68,0.3);
@@ -261,11 +270,22 @@ body {
 .source-chip {
   background: var(--bg3);
   border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 2px 10px;
+  border-radius: 6px;
+  padding: 4px 10px;
   font-size: 11px;
+  font-weight: 600;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
 }
+.source-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--bg2);
+}
+
 
 /* TYPING INDICATOR */
 .typing {

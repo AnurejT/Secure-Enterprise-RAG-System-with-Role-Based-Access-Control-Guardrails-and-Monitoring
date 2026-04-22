@@ -15,6 +15,8 @@ from api.routes import api_routes
 from api.auth import auth_bp
 from api.monitoring_routes import monitoring_bp
 from monitoring.langsmith_tracer import configure_langsmith
+from models.user import User
+from models.message import Message # Register for db.create_all()
 
 app = Flask(__name__)
 CORS(app)

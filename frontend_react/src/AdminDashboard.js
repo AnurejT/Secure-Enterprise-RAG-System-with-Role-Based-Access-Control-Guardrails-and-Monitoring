@@ -12,10 +12,10 @@ const STATS = [
 ];
 
 const DEPARTMENTS = [
-  { name: "Finance",   icon: "💰", role: "finance",   color: "#10b981", accessLevel: "Restricted", docTypes: "Financial Reports, Balance Sheets, Budgets",                queryCount: 19, status: "Active" },
-  { name: "HR",        icon: "🧑‍💼", role: "hr",        color: "#8b5cf6", accessLevel: "Restricted", docTypes: "HR Policies, Employee Records, Leave Guidelines",            queryCount: 11, status: "Active" },
-  { name: "Marketing", icon: "📣", role: "marketing", color: "#f59e0b", accessLevel: "Restricted", docTypes: "Campaign Materials, Market Research, Analytics",             queryCount: 9,  status: "Active" },
-  { name: "Employee",  icon: "👤", role: "employee",  color: "#6366f1", accessLevel: "Standard",   docTypes: "Company Guidelines, Announcements, Policies",               queryCount: 8,  status: "Active" },
+  { name: "Finance",   icon: "💰", role: "finance",   color: "#10b981", accessLevel: "L3 Restricted", docTypes: "Invoices, Reports, Budgets", queryCount: 28, status: "Secure" },
+  { name: "HR",        icon: "🧑‍💼", role: "hr",        color: "#8b5cf6", accessLevel: "L2 Internal",   docTypes: "Policies, Payroll, CVs",     queryCount: 15, status: "Active" },
+  { name: "Marketing", icon: "📣", role: "marketing", color: "#f59e0b", accessLevel: "L1 Public",     docTypes: "Campaigns, Data, Ads",       queryCount: 42, status: "Active" },
+  { name: "Employee",  icon: "👤", role: "employee",  color: "#6366f1", accessLevel: "L1 Public",     docTypes: "General Info, Manuals",      queryCount: 94, status: "Active" },
 ];
 
 const ACTIVITY = [
@@ -77,7 +77,7 @@ function MonitoringPanel({ token }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     fetchData();
@@ -280,15 +280,38 @@ function fmtSize(kb) {
 
 // ─── File Manager Panel ───────────────────────────────────────────
 function FileManagerPanel({ token }) {
-  const [files, setFiles]               = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [uploading, setUploading]       = useState(false);
-  const [uploadMsg, setUploadMsg]       = useState(null); // {type, text}
-  const [deletingFile, setDeletingFile] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null); // filename waiting confirm
-  const [dragOver, setDragOver]         = useState(false);
-  const [selectedRole, setSelectedRole] = useState("employee"); // ✅ Added role selector state
+  const [files, setFiles]                 = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [uploading, setUploading]         = useState(false);
+  const [uploadMsg, setUploadMsg]         = useState(null);
+  const [deletingFile, setDeletingFile]   = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [dragOver, setDragOver]           = useState(false);
+  const [selectedRole, setSelectedRole]   = useState("employee");
+  const [fileToUpload, setFileToUpload]   = useState(null);
+  const [searchQuery, setSearchQuery]     = useState("");
+  
+  // States used by sorting/filtering remnants in JSX (kept for compatibility)
+  const [filterDept, setFilterDept]       = useState("all");
+  const [sortKey, setSortKey]             = useState("name");
+  const [sortDir, setSortDir]             = useState("asc");
+
   const fileInputRef = useRef(null);
+
+  const ROLE_META = {
+    finance:   { label: "Finance",    icon: "💰", color: "#10b981", bg: "#ecfdf5", border: "#a7f3d0", text: "#065f46" },
+    hr:        { label: "HR",         icon: "🧑‍💼", color: "#8b5cf6", bg: "#f5f3ff", border: "#ddd6fe", text: "#4c1d95" },
+    marketing: { label: "Marketing",  icon: "📣", color: "#f59e0b", bg: "#fffbeb", border: "#fde68a", text: "#78350f" },
+    employee:  { label: "Employee",   icon: "👤", color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe", text: "#3730a3" },
+    admin:     { label: "Admin Only", icon: "🔐", color: "#3b82f6", bg: "#eff6ff", border: "#bfdbfe", text: "#1e3a8a" },
+  };
+  const roleOrder = ["finance", "hr", "marketing", "employee", "admin"];
+
+  const msgColors = {
+    success: "bg-green-50 text-green-700 border-green-200",
+    error:   "bg-red-50 text-red-700 border-red-200",
+    info:    "bg-blue-50 text-blue-700 border-blue-200",
+  };
 
   const fetchFiles = useCallback(async () => {
     setLoading(true);
@@ -302,28 +325,35 @@ function FileManagerPanel({ token }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
-  const handleUpload = async (file) => {
+  const handleUpload = (file) => {
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setUploadMsg({ type: "error", text: "Only PDF files are supported." });
+    const ALLOWED = [".pdf", ".docx", ".csv", ".xlsx", ".md"];
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+    if (!ALLOWED.includes(ext)) {
+      setUploadMsg({ type: "error", text: `Unsupported file type: ${ext}. Supported: PDF, DOCX, CSV, XLSX` });
       return;
     }
+
+    setFileToUpload(file);
+  };
+
+  const cancelUpload = () => setFileToUpload(null);
+
+  const confirmUpload = async () => {
+    const file = fileToUpload;
+    setFileToUpload(null);
     setUploading(true);
     setUploadMsg({ type: "info", text: `Uploading & indexing "${file.name}"…` });
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("role", selectedRole); // 🔥 Append role from dropdown
-
+    formData.append("role", selectedRole);
     try {
-      await axios.post(`${API}/upload`, formData, { 
-         headers: { 
-           "Content-Type": "multipart/form-data",
-           "Authorization": `Bearer ${token}`
-         } 
+      await axios.post(`${API}/upload`, formData, {
+        headers: { "Content-Type": "multipart/form-data", "Authorization": `Bearer ${token}` }
       });
       setUploadMsg({ type: "success", text: `✅ "${file.name}" uploaded & indexed successfully!` });
       fetchFiles();
@@ -341,7 +371,7 @@ function FileManagerPanel({ token }) {
       await axios.delete(`${API}/files/${encodeURIComponent(filename)}`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
-      setUploadMsg({ type: "success", text: `🗑️ "${filename}" deleted and removed from vector DB.` });
+      setUploadMsg({ type: "success", text: `🗑️ "${filename}" deleted successfully.` });
       fetchFiles();
     } catch (err) {
       setUploadMsg({ type: "error", text: `❌ Delete failed: ${err.response?.data?.error || err.message}` });
@@ -350,180 +380,254 @@ function FileManagerPanel({ token }) {
     }
   };
 
-  const msgColors = {
-    success: "bg-green-50 text-green-700 border-green-200",
-    error:   "bg-red-50 text-red-700 border-red-200",
-    info:    "bg-blue-50 text-blue-700 border-blue-200",
-  };
+  // ── Logic for Column-Based Table ──
+  const filteredFiles = files.filter(f => !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const grouped = {};
+  roleOrder.forEach(r => grouped[r] = []);
+  filteredFiles.forEach(f => {
+    const r = (f.role || "employee").toLowerCase();
+    if (grouped[r]) grouped[r].push(f);
+  });
+
+  const maxRows = Math.max(...roleOrder.map(r => grouped[r].length), 1);
+  const totalKb = files.reduce((s, f) => s + (f.size_kb || 0), 0);
+  const totalSize = totalKb >= 1024 ? `${(totalKb / 1024).toFixed(1)} MB` : `${totalKb} KB`;
+  const activeDepts = roleOrder.filter(r => grouped[r].length > 0);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Manage Files</h2>
-        <p className="text-sm text-gray-500">Upload new PDFs or delete existing ones from the knowledge base.</p>
-      </div>
+    <div className="space-y-6 animate-in fade-in duration-500">
 
-      {/* ✅ ROLE SELECTOR */}
-      <div className="flex items-center gap-3">
-        <label className="text-sm font-semibold text-gray-700">Assign Role to Document:</label>
-        <select
-          value={selectedRole}
-          onChange={(e) => setSelectedRole(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
-        >
-          <option value="employee">👤 Employee</option>
-          <option value="finance">💰 Finance</option>
-          <option value="marketing">📣 Marketing</option>
-          <option value="hr">🧑‍💼 HR</option>
-          <option value="admin">🔐 Admin Only</option>
-        </select>
-      </div>
-
-      {/* ── Upload Drop Zone ── */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files[0]); }}
-        onClick={() => !uploading && fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center
-          cursor-pointer transition-all duration-200 select-none
-          ${dragOver ? "border-blue-400 bg-blue-50 scale-[1.01]"
-            : uploading ? "border-blue-300 bg-blue-50/60 cursor-not-allowed"
-            : "border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/40"}`}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf"
-          className="hidden"
-          onChange={(e) => handleUpload(e.target.files[0])}
-          disabled={uploading}
-        />
-        {uploading ? (
-          <div className="flex flex-col items-center gap-3">
-            <svg className="animate-spin h-10 w-10 text-blue-500" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-            </svg>
-            <span className="text-blue-600 font-medium text-sm">Indexing document into vector DB…</span>
+      {/* Page Title & Stats */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-1">Manage Files</h2>
+          <p className="text-sm text-gray-500">Organize documents into department-based vertical columns.</p>
+        </div>
+        {!loading && (
+          <div className="flex gap-4">
+            <div className="bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm text-center">
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Documents</div>
+              <div className="text-lg font-black text-blue-600">{files.length}</div>
+            </div>
+            <div className="bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm text-center">
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Size</div>
+              <div className="text-lg font-black text-gray-700">{totalSize}</div>
+            </div>
           </div>
-        ) : (
-          <>
-            <div className="text-5xl mb-3">📤</div>
-            <p className="text-gray-700 font-semibold text-base">
-              {dragOver ? "Drop PDF here" : "Click or drag & drop PDF to upload"}
-            </p>
-            <p className="text-gray-400 text-sm mt-1">PDF files only · Auto-indexed with RBAC metadata</p>
-          </>
         )}
       </div>
 
-      {/* ── Status message ── */}
-      {uploadMsg && (
-        <div className={`px-4 py-3 rounded-xl text-sm font-medium border ${msgColors[uploadMsg.type]}`}>
-          {uploadMsg.text}
-        </div>
-      )}
+      {/* ── Top Section: Upload & Search ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-      {/* ── File List ── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-gray-900">Uploaded Files</h3>
-            <p className="text-xs text-gray-400 mt-0.5">{files.length} PDF{files.length !== 1 ? "s" : ""} in knowledge base</p>
+        {/* Upload Card */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-bold text-gray-700">📤 Push New Document</label>
+            <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50">
+              <option value="finance">Finance</option>
+              <option value="hr">HR</option>
+              <option value="marketing">Marketing</option>
+              <option value="employee">Employee</option>
+              <option value="admin">Admin Only</option>
+            </select>
           </div>
-          <button
-            onClick={fetchFiles}
-            className="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 
-              px-3 py-1.5 rounded-lg border border-blue-100 font-medium transition-all duration-150 flex items-center gap-1.5"
+
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files[0]); }}
+            onClick={() => !uploading && fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center
+              cursor-pointer transition-all duration-200 select-none
+              ${dragOver ? "border-blue-400 bg-blue-50 scale-[1.01]"
+                : uploading ? "border-blue-300 bg-blue-50/60 cursor-not-allowed"
+                : "border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/40"}`}
           >
-            🔄 Refresh
-          </button>
+            <input ref={fileInputRef} type="file" accept=".pdf,.docx,.csv,.xlsx,.md" className="hidden"
+              onChange={(e) => handleUpload(e.target.files[0])} disabled={uploading} />
+            {uploading ? (
+              <div className="flex flex-col items-center gap-3">
+                <svg className="animate-spin h-8 w-8 text-blue-500" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+                <span className="text-blue-600 font-bold text-xs uppercase tracking-widest">Indexing...</span>
+              </div>
+            ) : (
+              <>
+                <div className="text-3xl mb-2">📄</div>
+                <p className="text-gray-700 font-bold text-sm tracking-tight">{dragOver ? "Drop to Index" : "Click to Upload PDF"}</p>
+                <p className="text-gray-400 text-[10px] mt-1 font-semibold uppercase tracking-wider">Indexed into ChromaDB with metadata</p>
+              </>
+            )}
+          </div>
         </div>
 
+        {/* Messaging & Search */}
+        <div className="space-y-4 flex flex-col">
+          {uploadMsg ? (
+            <div className={`px-4 py-4 rounded-2xl text-sm font-bold border shadow-sm flex items-start gap-3 flex-1 ${msgColors[uploadMsg.type]}`}>
+              <span className="text-lg">{uploadMsg.type === 'success' ? '✅' : uploadMsg.type === 'error' ? '❌' : 'ℹ️'}</span>
+              <div className="flex-1">{uploadMsg.text}</div>
+              <button onClick={() => setUploadMsg(null)} className="opacity-40 hover:opacity-100 italic px-2">hide</button>
+            </div>
+          ) : (
+            <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg flex-1 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-8 transform translate-x-4 -translate-y-4 rotate-12 opacity-10 group-hover:rotate-0 transition-transform duration-700">
+                <svg className="w-32 h-32" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              </div>
+              <h4 className="text-lg font-black mb-1">Knowledge Guard</h4>
+              <p className="text-indigo-100 text-xs font-semibold leading-relaxed max-w-[240px]">Ensuring zero-trust document retrieval through role-based metadata filtering.</p>
+            </div>
+          )}
+
+          <div className="relative">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg">🔍</span>
+            <input
+              type="text"
+              placeholder="Search across all departments..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white border border-gray-100 shadow-sm rounded-2xl pl-12 pr-4 py-4 text-sm font-bold placeholder-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Department-Column Matrix Table ── */}
+      <div className="bg-white rounded-[2rem] border border-gray-100 shadow-2xl overflow-hidden min-h-[500px]">
         {loading ? (
-          <div className="flex items-center justify-center py-16 gap-3 text-gray-400">
-            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-            </svg>
-            <span className="text-sm">Loading files…</span>
+          <div className="flex flex-col items-center justify-center py-40 gap-4">
+            <div className="w-14 h-14 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
+            <span className="text-gray-300 font-black text-[10px] uppercase tracking-[0.2em]">Synchronizing Repository</span>
           </div>
         ) : files.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2">
-            <div className="text-4xl opacity-40">📂</div>
-            <p className="text-sm font-medium">No PDFs uploaded yet</p>
-            <p className="text-xs">Upload a file above to get started</p>
+          <div className="flex flex-col items-center justify-center py-32 gap-6 grayscale opacity-40">
+            <div className="text-8xl">📦</div>
+            <div className="text-center">
+              <p className="text-lg font-black text-gray-900 uppercase tracking-widest mb-1">Knowledge Void</p>
+              <p className="text-sm font-bold text-gray-400">Upload documents to populate the neural index.</p>
+            </div>
           </div>
         ) : (
-          <ul className="divide-y divide-gray-50">
-            {files.map((f) => {
-              const isDeleting = deletingFile === f.name;
-              const isConfirming = confirmDelete === f.name;
-              return (
-                <li
-                  key={f.name}
-                  className={`flex items-center gap-4 px-6 py-4 transition-colors
-                    ${isDeleting ? "bg-red-50/40" : "hover:bg-gray-50/70"}`}
-                >
-                  {/* File icon */}
-                  <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-100 flex items-center justify-center text-xl flex-shrink-0">
-                    📄
-                  </div>
+          <div className="overflow-x-auto overflow-y-hidden">
+            <table className="w-full border-collapse table-fixed min-w-[1000px]">
+              <thead>
+                <tr>
+                  {roleOrder.map((role) => {
+                    const cfg = ROLE_META[role];
+                    return (
+                      <th key={role} className="border-b border-gray-50 px-6 py-6 bg-gray-50/30 text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-2xl mb-1">{cfg.icon}</span>
+                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Department</span>
+                          <span className="text-sm font-black text-gray-900" style={{ color: cfg.color }}>{cfg.label}</span>
+                          <span className="text-[10px] font-bold text-gray-400 bg-white border border-gray-100 px-2.2 py-0.5 rounded-full mt-1">
+                            {grouped[role].length} Files
+                          </span>
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {Array.from({ length: maxRows }).map((_, rowIndex) => (
+                  <tr key={rowIndex} className="group/row">
+                    {roleOrder.map((role) => {
+                      const file = grouped[role][rowIndex];
+                      const isDeleting = deletingFile === file?.name;
 
-                  {/* Name & size */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">{f.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{fmtSize(f.size_kb)}</p>
-                  </div>
+                      if (!file) return <td key={role} className="p-2 border-l first:border-l-0 border-gray-50/50" />;
 
-                  {/* Role tag inferred from filename */}
-                  <span className="hidden sm:inline-block text-xs bg-gray-100 text-gray-500 px-2.5 py-1 rounded-full font-medium">
-                    PDF
-                  </span>
+                      return (
+                        <td key={role} className="p-3 align-top border-l first:border-l-0 border-gray-50/50">
+                          <div className={`relative p-4 rounded-3xl border transition-all duration-300 group/card animate-in zoom-in-95
+                            ${confirmDelete === file.name ? 'border-red-200 bg-red-50 ring-4 ring-red-100/50' : 'border-gray-50 bg-gray-50/50 hover:bg-white hover:shadow-xl hover:border-gray-200 hover:-translate-y-1'}`}>
+                            
+                            <div className="flex items-start justify-between gap-3 mb-3">
+                              <div className="w-9 h-9 rounded-2xl bg-white shadow-sm flex items-center justify-center text-lg border border-gray-50">📄</div>
+                              {isDeleting ? (
+                                <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin mt-1" />
+                              ) : confirmDelete === file.name ? (
+                                <div className="flex gap-2 animate-in slide-in-from-right-4">
+                                  <button onClick={() => setConfirmDelete(null)} className="text-[10px] font-black text-gray-500 hover:text-black uppercase">No</button>
+                                  <button onClick={() => handleDelete(file.name)} className="text-[10px] font-black text-red-600 hover:text-red-800 uppercase">Delete</button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setConfirmDelete(file.name)}
+                                  className="opacity-0 group-hover/card:opacity-100 text-gray-300 hover:text-red-500 transition-all text-sm leading-none p-1"
+                                >✕</button>
+                              )}
+                            </div>
 
-                  {/* Actions */}
-                  {isDeleting ? (
-                    <div className="flex items-center gap-1.5 text-red-400 text-xs">
-                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                      </svg>
-                      Deleting…
-                    </div>
-                  ) : isConfirming ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-red-600 font-medium">Are you sure?</span>
-                      <button
-                        onClick={() => handleDelete(f.name)}
-                        className="text-xs px-3 py-1.5 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors"
-                      >
-                        Delete
-                      </button>
-                      <button
-                        onClick={() => setConfirmDelete(null)}
-                        className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setConfirmDelete(f.name)}
-                      className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-600
-                        bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg border border-red-100
-                        hover:border-red-200 font-medium transition-all duration-150"
-                      title={`Delete ${f.name}`}
-                    >
-                      🗑️ Delete
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                            <div className="min-w-0">
+                              <p className="text-[12px] font-black text-gray-900 leading-[1.3] mb-2 line-clamp-2 cursor-help" title={file.name}>
+                                {file.name}
+                              </p>
+                              
+                              <div className="flex items-center justify-between border-t border-gray-100 pt-2.5 mt-2">
+                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider">{fmtSize(file.size_kb)}</span>
+                                <span className="flex items-center gap-1.5 text-[9px] font-black text-emerald-600 uppercase tracking-widest">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                  Ready
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
+
+      {/* Footer / Refresh */}
+      <div className="flex justify-between items-center px-4">
+        <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
+          Refreshed: {new Date().toLocaleTimeString()}
+        </div>
+        <button
+          onClick={fetchFiles}
+          disabled={loading}
+          className="group flex items-center gap-3 px-8 py-4 bg-white border-2 border-gray-100 shadow-xl rounded-2xl text-[10px] font-black text-gray-600 uppercase tracking-widest hover:border-blue-600 hover:text-blue-600 active:scale-95 transition-all"
+        >
+          <span className={`transition-transform duration-500 ${loading ? 'animate-spin' : 'group-hover:rotate-180'}`}>🔄</span>
+          Force Sync
+        </button>
+      </div>
+
+      {/* ── Ingest Confirmation Overlay ── */}
+      {fileToUpload && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/80 backdrop-blur-xl p-6 animate-in fade-in duration-500">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl p-10 w-full max-w-md border border-white/20 animate-in zoom-in-95 duration-500">
+            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center text-4xl mb-8 mx-auto shadow-inner shadow-blue-100">📤</div>
+            <h3 className="text-2xl font-black text-gray-900 text-center mb-3 tracking-tight">Confirm Knowledge Ingestion</h3>
+            <p className="text-base text-gray-500 text-center mb-10 font-medium leading-relaxed px-2">
+              You are pushing <span className="text-gray-900 font-bold block mt-1 italic">"{fileToUpload.name}"</span> 
+              to the <span className="inline-flex items-center gap-1.5 text-blue-600 font-black uppercase tracking-tighter bg-blue-50 px-3 py-1 rounded-full text-xs">{ROLE_META[selectedRole].icon} {ROLE_META[selectedRole].label}</span> department.
+            </p>
+            <div className="grid grid-cols-2 gap-5">
+              <button onClick={cancelUpload}
+                className="px-6 py-5 bg-gray-100 hover:bg-gray-200 text-gray-500 font-black text-xs uppercase tracking-[0.2em] rounded-2xl transition-all">
+                Cancel
+              </button>
+              <button onClick={confirmUpload}
+                className="px-6 py-5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-2xl shadow-blue-200 transition-all active:scale-95">
+                Ingest Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -538,11 +642,11 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
     axios.get(`${API}/files`, { headers: { "Authorization": `Bearer ${user.token}` } })
       .then((res) => setFileCount(String(res.data.files?.length ?? "—")))
       .catch(() => {});
-  }, [activeNav, user.token]); // refresh when switching tabs
+  }, [activeNav, user.token]);
 
   const handleNav = (id) => {
     if (id === "chat")                          { onOpenChat(); return; }
-    if (id === "analytics" || id === "settings") return; // coming soon
+    if (id === "analytics" || id === "settings") return;
     setActiveNav(id);
   };
 
@@ -563,271 +667,190 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
     <div className="flex min-h-screen bg-gray-50 font-sans">
 
       {/* ── Sidebar ── */}
-      <aside className="w-64 flex-shrink-0 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white flex flex-col min-h-screen shadow-2xl">
+      <aside className="w-60 flex-shrink-0 bg-white border-r border-gray-100 flex flex-col shadow-sm">
         {/* Logo */}
-        <div className="px-6 py-6 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-500 flex items-center justify-center text-xl shadow">🧠</div>
+        <div className="px-5 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center text-white text-base font-extrabold shadow-sm">E</div>
             <div>
-              <div className="text-xs text-white/50 font-medium leading-none">Enterprise</div>
-              <div className="text-sm font-bold leading-tight">RAG System</div>
+              <div className="text-sm font-extrabold text-gray-900 leading-tight">EnterpriseRAG</div>
+              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Admin Console</div>
             </div>
           </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-4 py-6 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const isActive = activeNav === item.id;
-            const isSoon   = item.soon;
             return (
               <button
                 key={item.id}
                 onClick={() => handleNav(item.id)}
-                disabled={isSoon}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
-                  ${isActive
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40"
-                    : isSoon
-                      ? "text-white/25 cursor-not-allowed"
-                      : "text-white/70 hover:bg-white/10 hover:text-white"}`}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150
+                  ${isActive ? "bg-blue-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}
+                  ${item.soon ? "opacity-50 cursor-not-allowed" : ""}`}
               >
-                <span className="text-lg">{item.icon}</span>
+                <span className="text-base">{item.icon}</span>
                 <span className="flex-1 text-left">{item.label}</span>
-                {item.id === "chat" && (
-                  <span className="text-xs bg-blue-500/30 text-blue-200 px-2 py-0.5 rounded-full">Open</span>
-                )}
-                {isSoon && (
-                  <span className="text-xs text-white/30 italic">soon</span>
-                )}
+                {item.soon && <span className="text-[9px] font-bold bg-black/10 px-1.5 py-0.5 rounded-full">SOON</span>}
               </button>
             );
           })}
         </nav>
 
-        {/* User info */}
-        <div className="px-4 pb-4 border-t border-white/10 pt-4 space-y-3">
-          <div className="flex items-center gap-3 px-3 py-2.5 bg-white/5 rounded-xl">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-lg">🔐</div>
-            <div className="overflow-hidden">
-              <div className="text-xs text-white/40 font-medium">Administrator</div>
-              <div className="text-sm font-semibold text-white truncate">{user.email}</div>
+        {/* User card */}
+        <div className="px-3 pb-4">
+          <div className="bg-gray-50 rounded-2xl px-3 py-3 flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-extrabold flex-shrink-0">
+              {(user.username || "A")[0].toUpperCase()}
             </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-bold text-gray-900 truncate">{user.username || "Admin"}</div>
+              <div className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide">{user.role || "admin"}</div>
+            </div>
+            <button onClick={onLogout} title="Logout"
+              className="text-gray-400 hover:text-red-500 transition-colors text-base ml-auto">⏏</button>
           </div>
-          <button
-            onClick={onLogout}
-            className="w-full py-2.5 rounded-xl text-sm font-medium text-white/50 hover:text-white
-              bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-400/30 transition-all duration-200"
-          >
-            ← Logout
-          </button>
         </div>
       </aside>
 
       {/* ── Main content ── */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 flex flex-col min-w-0">
 
         {/* Top bar */}
-        <div className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-gray-100 px-8 py-4 flex items-center justify-between">
+        <header className="bg-white border-b border-gray-100 px-8 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
           <div>
             <h1 className="text-xl font-bold text-gray-900">{pageTitle}</h1>
             <p className="text-xs text-gray-400 mt-0.5">{dateStr}</p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full font-medium">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse inline-block" />
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               System Online
-            </span>
-            <button
-              onClick={onOpenChat}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600
-                text-white text-sm font-semibold rounded-xl shadow hover:shadow-md
-                hover:from-blue-700 hover:to-indigo-700 transition-all duration-200"
-            >
-              💬 Query Assistant
+            </div>
+            <button onClick={onLogout}
+              className="text-xs text-gray-500 hover:text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 px-3 py-1.5 rounded-lg font-semibold transition-all">
+              Logout
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* ── File Manager view ── */}
-        {activeNav === "files" && (
-          <div className="px-8 py-8">
-            <FileManagerPanel token={user.token} />
-          </div>
-        )}
+        {/* Page content */}
+        <div className="flex-1 px-8 py-6 overflow-y-auto">
 
-        {/* ── Monitoring view ── */}
-        {activeNav === "monitoring" && (
-          <div className="px-8 py-8">
-            <MonitoringPanel token={user.token} />
-          </div>
-        )}
+          {/* ── Dashboard ── */}
+          {activeNav === "dashboard" && (
+            <div className="space-y-6">
 
-        {/* ── Dashboard view ── */}
-        {activeNav === "dashboard" && (
-          <div className="px-8 py-8 space-y-8">
-
-            {/* Welcome banner */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl px-8 py-7 text-white shadow-lg">
-              <p className="text-blue-100 text-sm font-medium mb-1">Welcome back 👋</p>
-              <h2 className="text-2xl font-bold">Good {now.getHours() < 12 ? "Morning" : now.getHours() < 18 ? "Afternoon" : "Evening"}, Admin</h2>
-              <p className="text-blue-200 text-sm mt-2">
-                You have full access to all departments and system management.
-                {" "}<button onClick={onOpenChat} className="underline hover:text-white transition-colors">Open Query Assistant →</button>
-              </p>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 xl:grid-cols-4 gap-5">
-              {liveStats.map((s) => (
-                <div key={s.label}
-                  className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center text-2xl"
-                      style={{ background: s.bg }}>
-                      {s.icon}
+              {/* Stats row */}
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                {liveStats.map((s) => (
+                  <div key={s.label} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl" style={{ background: s.bg }}>{s.icon}</div>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{s.change}</span>
                     </div>
-                    <span className="text-xs font-medium px-2.5 py-1 rounded-full"
-                      style={{ background: s.bg, color: s.color }}>
-                      Live
-                    </span>
+                    <div className="text-2xl font-extrabold text-gray-900 mb-0.5">{s.value}</div>
+                    <div className="text-xs font-semibold text-gray-500">{s.label}</div>
                   </div>
-                  <div className="text-2xl font-extrabold text-gray-900 mb-0.5">{s.value}</div>
-                  <div className="text-xs font-semibold text-gray-500 mb-1">{s.label}</div>
-                  <div className="text-xs font-medium" style={{ color: s.color }}>{s.change}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Two-column section */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-
-              {/* Department access table */}
-              <div className="xl:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-6 py-5 border-b border-gray-50 flex items-center justify-between">
-                  <div>
-                    <h3 className="font-bold text-gray-900">Department Access Control</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">RBAC metadata managed by the retrieval layer</p>
-                  </div>
-                  <span className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full font-medium border border-blue-100">
-                    4 Active
-                  </span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        <th className="px-6 py-3 text-left">Department</th>
-                        <th className="px-6 py-3 text-left">Role Tag</th>
-                        <th className="px-6 py-3 text-left">Queries</th>
-                        <th className="px-6 py-3 text-left">Access</th>
-                        <th className="px-6 py-3 text-left">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {DEPARTMENTS.map((d) => (
-                        <tr key={d.role} className="hover:bg-gray-50/60 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2.5">
-                              <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base"
-                                style={{ background: d.color + "18" }}>
-                                {d.icon}
-                              </span>
-                              <div>
-                                <div className="font-semibold text-gray-800">{d.name}</div>
-                                <div className="text-xs text-gray-400 truncate max-w-[140px]">{d.docTypes}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <code className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md font-mono">{d.role}</code>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 bg-gray-100 rounded-full h-1.5 w-20">
-                                <div className="h-1.5 rounded-full" style={{ width: `${(d.queryCount / 20) * 100}%`, background: d.color }} />
-                              </div>
-                              <span className="text-xs font-semibold text-gray-600">{d.queryCount}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="text-xs font-medium px-2.5 py-1 rounded-full"
-                              style={{ background: d.color + "18", color: d.color }}>
-                              {d.accessLevel}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-                              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                              Active
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Recent Activity */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-6 py-5 border-b border-gray-50">
-                  <h3 className="font-bold text-gray-900">Recent Activity</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">Latest system events</p>
-                </div>
-                <div className="px-4 py-4 space-y-1 max-h-[400px] overflow-y-auto">
-                  {ACTIVITY.map((a, i) => (
-                    <div key={i} className="flex items-start gap-3 px-2 py-3 rounded-xl hover:bg-gray-50 transition-colors">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0"
-                        style={{ background: a.color + "18" }}>
-                        {a.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-700 leading-snug">{a.text}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs text-gray-400">{a.time}</span>
-                          <span className="text-xs font-medium px-1.5 py-0.5 rounded"
-                            style={{ background: a.color + "18", color: a.color }}>
-                            {a.label}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h3 className="font-bold text-gray-900 mb-1">Quick Actions</h3>
-              <p className="text-xs text-gray-400 mb-5">Jump to frequently used admin tasks</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {[
-                  { label: "Query Assistant", icon: "💬", desc: "Ask questions across all docs",       action: onOpenChat,                        color: "#3b82f6", bg: "#eff6ff" },
-                  { label: "Manage Files",    icon: "🗂️", desc: "Upload & delete knowledge base PDFs", action: () => setActiveNav("files"),        color: "#10b981", bg: "#ecfdf5" },
-                  { label: "Analytics",       icon: "📊", desc: "View usage & query stats",            action: null, soon: true,                   color: "#8b5cf6", bg: "#f5f3ff" },
-                  { label: "Audit Logs",      icon: "📋", desc: "Review system access logs",           action: null, soon: true,                   color: "#f59e0b", bg: "#fffbeb" },
-                ].map((qa) => (
-                  <button
-                    key={qa.label}
-                    onClick={qa.action || undefined}
-                    disabled={!qa.action}
-                    className={`text-left p-4 rounded-xl border transition-all duration-200 group
-                      ${qa.action ? "hover:shadow-md hover:-translate-y-0.5 cursor-pointer" : "cursor-not-allowed opacity-50"}`}
-                    style={{ background: qa.bg, borderColor: qa.color + "30" }}
-                  >
-                    <div className="text-2xl mb-2">{qa.icon}</div>
-                    <div className="text-sm font-semibold text-gray-800 mb-0.5">{qa.label}</div>
-                    <div className="text-xs text-gray-500">{qa.desc}</div>
-                    {qa.soon && <div className="text-xs font-medium mt-2" style={{ color: qa.color }}>Coming soon</div>}
-                  </button>
                 ))}
               </div>
-            </div>
 
-          </div>
-        )}
+              {/* Departments table + Activity */}
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+                {/* Departments */}
+                <div className="xl:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div className="px-6 py-5 border-b border-gray-50">
+                    <h3 className="font-bold text-gray-900">Department Overview</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">Role-based access and document isolation status</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                          <th className="px-6 py-3 text-left">Department</th>
+                          <th className="px-6 py-3 text-left">Document Types</th>
+                          <th className="px-6 py-3 text-center">Queries</th>
+                          <th className="px-6 py-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {DEPARTMENTS.map((dept) => (
+                          <tr key={dept.name} className="hover:bg-gray-50/60 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base"
+                                  style={{ background: dept.color + "20", color: dept.color }}>{dept.icon}</div>
+                                <div>
+                                  <div className="font-semibold text-gray-900 text-sm">{dept.name}</div>
+                                  <div className="text-[10px] font-medium text-gray-400">{dept.accessLevel}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <p className="text-xs text-gray-500 max-w-[220px] leading-relaxed">{dept.docTypes}</p>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className="text-sm font-bold text-gray-800">{dept.queryCount}</span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />{dept.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Activity feed */}
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+                  <div className="px-5 py-5 border-b border-gray-50">
+                    <h3 className="font-bold text-gray-900">Recent Activity</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">Live system audit trail</p>
+                  </div>
+                  <ul className="divide-y divide-gray-50 px-1">
+                    {ACTIVITY.map((a, i) => (
+                      <li key={i} className="px-4 py-3.5 hover:bg-gray-50/60 transition-colors rounded-xl">
+                        <div className="flex items-start gap-3">
+                          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
+                            style={{ background: a.color + "15", color: a.color }}>{a.icon}</div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-gray-800 leading-snug">{a.text}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: a.color + "15", color: a.color }}>{a.label}</span>
+                              <span className="text-[10px] text-gray-400">{a.time}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Manage Files ── */}
+          {activeNav === "files" && <FileManagerPanel token={user.token} />}
+
+          {/* ── Monitoring ── */}
+          {activeNav === "monitoring" && <MonitoringPanel token={user.token} />}
+
+          {/* ── Settings / Analytics stubs ── */}
+          {(activeNav === "settings" || activeNav === "analytics") && (
+            <div className="flex flex-col items-center justify-center py-32 gap-4 text-gray-400">
+              <div className="text-6xl opacity-20">🚧</div>
+              <p className="text-lg font-bold text-gray-500">Coming Soon</p>
+              <p className="text-sm">This section is under development.</p>
+            </div>
+          )}
+
+        </div>
       </main>
     </div>
   );
