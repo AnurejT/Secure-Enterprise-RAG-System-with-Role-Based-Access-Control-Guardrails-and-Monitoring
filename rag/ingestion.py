@@ -1,74 +1,53 @@
-# rag/ingestion.py
-
-import os
-import shutil
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from rag.vector_store import get_vector_store
 from rag.embeddings import get_embeddings
-from rag.vector_store import create_vector_store
 
 
-# ─── RESET VECTOR DB ─────────────────────────
-def reset_vector_db():
-    if os.path.exists("vector_db"):
-        shutil.rmtree("vector_db")
-        print("[RESET] Old vector DB deleted")
+def ingest_pdf(file_path, role):
+    print("\n================ INGESTION START ================")
+    print("[FILE]:", file_path)
+    print("[ROLE]:", role)
 
-
-# ─── RULE-BASED ROLE DETECTION (VERY IMPORTANT) ─────────────
-def detect_role(text):
-    t = text.lower()
-
-    if any(w in t for w in ["$", "budget", "expense", "payment", "approval", "cost"]):
-        return "finance"
-
-    if any(w in t for w in ["salary", "employee", "leave", "recruitment", "hr"]):
-        return "hr"
-
-    if any(w in t for w in ["ads", "campaign", "marketing", "promotion"]):
-        return "marketing"
-
-    if any(w in t for w in ["system", "software", "server", "engineering"]):
-        return "engineering"
-
-    return "general"
-
-
-# ─── MAIN INGEST ─────────────────────────────
-def ingest_pdf(file_path):
-    print(f"\n[INGEST] File: {file_path}")
-
-    reset_vector_db()
-
+    # =========================
+    # LOAD PDF
+    # =========================
     loader = PyPDFLoader(file_path)
     documents = loader.load()
 
+    print(f"[LOADED DOCS]: {len(documents)}")
+
+    # =========================
+    # SPLIT INTO CHUNKS
+    # =========================
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,
-        chunk_overlap=80
+        chunk_overlap=50
     )
 
     chunks = splitter.split_documents(documents)
 
-    print(f"[INFO] Total chunks: {len(chunks)}")
+    print(f"[CHUNKS CREATED]: {len(chunks)}")
 
+    # =========================
+    # ADD ROLE METADATA
+    # =========================
     for i, chunk in enumerate(chunks):
-        role = detect_role(chunk.page_content)
-
-        chunk.metadata["role_allowed"] = [role, "admin"]
-        chunk.metadata["department"] = role
+        chunk.metadata["role_allowed"] = [role.lower()]
         chunk.metadata["source"] = file_path
 
-        # DEBUG
-        if i < 5:
-            print("\n[CHUNK]")
-            print(chunk.page_content[:120])
-            print("DEPT:", role)
+        print(f"\n[CHUNK {i+1}]")
+        print("Preview:", chunk.page_content[:100])
+        print("Metadata:", chunk.metadata)
 
+    # =========================
+    # STORE IN VECTOR DB
+    # =========================
     embeddings = get_embeddings()
-    vector_db = create_vector_store(chunks, embeddings)
+    vector_db = get_vector_store(embeddings)
 
-    print("[INFO] Stored in vector DB")
+    vector_db.add_documents(chunks)
 
-    return vector_db
+    print(f"\n[INGEST COMPLETE] Stored {len(chunks)} chunks")
+    print("================================================\n")

@@ -1,78 +1,131 @@
+# api/auth.py
 import jwt
 import datetime
-from flask import Blueprint, request, jsonify, current_app
+from functools import wraps
+from flask import Blueprint, request, jsonify
 from extensions import db, bcrypt
-from models.user import User, VALID_ROLES
+from models.user import User
 
+# ✅ Added Blueprint for auth routes
 auth_bp = Blueprint("auth", __name__)
 
+SECRET_KEY = "enterprise-rag-secret-key-2026"  # move to .env in production
 
-# ─── REGISTER ────────────────────────────────────────────────────────────────
-@auth_bp.route("/register", methods=["POST"])
-def register():
-    data = request.get_json()
+# 🔑 Generate JWT
+def generate_token(email, role):
+    payload = {
+        "email": email,
+        "role": role,
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=2)
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    return token
 
-    name     = (data.get("name") or "").strip()
-    email    = (data.get("email") or "").strip().lower()
-    password = data.get("password") or ""
-    role     = (data.get("role") or "employee").strip().lower()
-    dept     = (data.get("department") or "employee").strip().lower()
+# 🔍 Verify JWT
+def verify_token(token):
+    try:
+        decoded = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return decoded
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
 
-    # Validation
-    if not name:
-        return jsonify({"error": "Name is required"}), 400
-    if not email or "@" not in email:
-        return jsonify({"error": "Valid email is required"}), 400
-    if len(password) < 6:
-        return jsonify({"error": "Password must be at least 6 characters"}), 400
+# 🔐 Decorator for protected routes
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get("Authorization")
 
-    # Determine final role
-    if role == "admin":
-        final_role = "admin"
-    else:
-        final_role = dept if dept in VALID_ROLES else "employee"
+        if not auth_header:
+            return jsonify({"error": "Token missing"}), 401
 
-    if final_role not in VALID_ROLES:
-        return jsonify({"error": "Invalid role"}), 400
+        try:
+            token = auth_header.split(" ")[1]  # Bearer <token>
+        except:
+            return jsonify({"error": "Invalid token format"}), 401
 
-    # Check duplicate
-    if User.query.filter_by(email=email).first():
-        return jsonify({"error": "An account with this email already exists"}), 409
+        data = verify_token(token)
 
-    password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
-    user = User(name=name, email=email, password_hash=password_hash, role=final_role)
-    db.session.add(user)
-    db.session.commit()
+        if not data:
+            return jsonify({"error": "Invalid or expired token"}), 401
 
-    token = _generate_token(user)
-    return jsonify({"token": token, "user": user.to_dict()}), 201
+        # attach user info to request
+        request.user = data
 
+        return f(*args, **kwargs)
 
-# ─── LOGIN ────────────────────────────────────────────────────────────────────
+    return decorated
+
+# -------------------------
+# AUTH ROUTES 🔐
+# -------------------------
+
 @auth_bp.route("/login", methods=["POST"])
 def login():
-    data = request.get_json()
+    data = request.json
+    if not data or not data.get("email") or not data.get("password"):
+        return jsonify({"error": "Missing email or password"}), 400
 
-    email    = (data.get("email") or "").strip().lower()
-    password = data.get("password") or ""
-
-    if not email or not password:
-        return jsonify({"error": "Email and password are required"}), 400
+    email = data.get("email").lower()
+    password = data.get("password")
 
     user = User.query.filter_by(email=email).first()
+
     if not user or not bcrypt.check_password_hash(user.password_hash, password):
-        return jsonify({"error": "Invalid email or password"}), 401
+        return jsonify({"error": "Invalid credentials"}), 401
 
-    token = _generate_token(user)
-    return jsonify({"token": token, "user": user.to_dict()}), 200
+    token = generate_token(user.email, user.role)
 
+    return jsonify({
+        "token": token,
+        "user": {
+            "email": user.email,
+            "role": user.role,
+            "name": user.name
+        }
+    })
 
-# ─── Helper ───────────────────────────────────────────────────────────────────
-def _generate_token(user):
-    payload = {
-        "user_id": user.id,
-        "email":   user.email,
-        "role":    user.role,
-        "exp":     datetime.datetime.utcnow() + datetime.timedelta(days=7),
-    }
-    return jwt.encode(payload, current_app.config["SECRET_KEY"], algorithm="HS256")
+@auth_bp.route("/register", methods=["POST"])
+def register():
+    data = request.json
+    if not data or not data.get("email") or not data.get("password") or not data.get("name"):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    email = data.get("email").lower()
+    password = data.get("password")
+    name = data.get("name")
+    
+    frontend_role = data.get("role", "employee")
+    department = data.get("department", "employee")
+    
+    # if admin is selected but they don't have a special key or it's not allowed, we just let them for the demo
+    final_role = department if frontend_role != "admin" else "admin"
+
+    existing_user = User.query.filter_by(email=email).first()
+    if existing_user:
+        return jsonify({"error": "Email is already registered"}), 400
+
+    hashed_pw = bcrypt.generate_password_hash(password).decode("utf-8")
+    
+    new_user = User(
+        name=name,
+        email=email,
+        password_hash=hashed_pw,
+        role=final_role
+    )
+    
+    db.session.add(new_user)
+    db.session.commit()
+
+    token = generate_token(new_user.email, new_user.role)
+
+    return jsonify({
+        "message": "User created successfully",
+        "token": token,
+        "user": {
+            "email": new_user.email,
+            "role": new_user.role,
+            "name": new_user.name
+        }
+    }), 201

@@ -2,83 +2,86 @@
 
 from rag.vector_store import load_vector_store
 from rag.embeddings import get_embeddings
+from collections import defaultdict
+import re
 
 
-def get_relevant_docs(query):
+# -------------------------
+# SIMPLE KEYWORD SCORING
+# -------------------------
+def keyword_score(query, text):
+    query_words = set(re.findall(r"\w+", query.lower()))
+    text_words = set(re.findall(r"\w+", text.lower()))
+
+    # overlap score
+    return len(query_words & text_words)
+
+
+# -------------------------
+# HYBRID RETRIEVER
+# -------------------------
+def get_relevant_docs(query, role):
     embeddings = get_embeddings()
     vector_db = load_vector_store(embeddings)
 
-    print("\n[RETRIEVER] ORIGINAL QUERY:", query)
+    print("\n[HYBRID RETRIEVER]")
+    print("QUERY:", query)
+    print("ROLE:", role)
 
-    # ─── STEP 1: Semantic Search ───────────────────────────────
-    docs = vector_db.similarity_search(query, k=15)
+    # -------------------------
+    # 1. FETCH DOCUMENTS
+    # -------------------------
+    # Fetch a wider net of documents, then filter in memory to avoid ChromaDB list-filter syntax issues.
+    raw_docs = vector_db.similarity_search(query, k=20)
 
-    # ─── STEP 2: Keyword Boost (IMPROVED) ───────────────────
+    # -------------------------
+    # 2. STRICT RBAC FILTERING
+    # -------------------------
+    allowed_docs = []
+    for d in raw_docs:
+        roles = d.metadata.get("role_allowed", [])
+        # Normalization just in case older docs stored string instead of list
+        if isinstance(roles, str):
+            roles = [roles]
+        
+        # Enforce RBAC (Admins see everything)
+        if role.lower() == "admin" or role.lower() in roles or "admin" in roles:
+            allowed_docs.append(d)
+
+    # -------------------------
+    # 3. HYBRID RANKING (Semantic + Keyword)
+    # -------------------------
     keyword_docs = []
+    for d in allowed_docs:
+        score = keyword_score(query, d.page_content)
+        if score > 0:
+            keyword_docs.append((d, score))
+            
+    # Sort keyword matches
+    keyword_docs = sorted(keyword_docs, key=lambda x: x[1], reverse=True)
+    keyword_ranked = [d[0] for d in keyword_docs]
 
-    keywords_map = {
-
-        # Finance / Compliance
-        "audit": ["audit", "financial audit", "compliance audit"],
-        "finance": ["finance", "financial policy", "budget"],
-        
-        # Salary / Payroll
-        "salary": ["salary", "payroll", "salary processing", "wages"],
-        
-        # Expense / Reimbursement
-        "expense": ["expense", "reimbursement", "expense policy", "5000", "$5,000"],
-        
-        # 🔥 NEW: Budget / Spending / Approval (FIXED ISSUE)
-        "budget": ["budget", "budget approval", "spending limit"],
-        "spend": ["spend", "spending", "expenditure", "cost"],
-        "approval": ["approval", "authorization", "manager approval", "finance approval"],
-        "limit": ["limit", "threshold", "maximum amount", "5000", "$5000"],
-        
-        # HR
-        "leave": ["leave", "leave policy", "vacation", "sick leave"],
-        "employee": ["employee", "staff", "employment"],
-        
-        # Marketing
-        "marketing": ["marketing", "campaign", "advertising", "branding"],
-        
-        # General policies
-        "policy": ["policy", "rules", "guidelines", "procedure"]
-    }
-
-    query_lower = query.lower()
-
-    for key, variations in keywords_map.items():
-        # Trigger booster if the main key OR any specific variation is found in the query
-        if key in query_lower or any(v in query_lower for v in variations):
-            print(f"[RETRIEVER] Keyword match: {key}")
-
-            for term in variations:
-                extra_docs = vector_db.similarity_search(term, k=3)
-                keyword_docs.extend(extra_docs)
-
-    # ─── STEP 3: Combine Results ───────────────────────────────
-    docs.extend(keyword_docs)
-
-    # ─── STEP 4: Remove Duplicates ─────────────────────────────
+    # Combine ensuring no duplicates
+    combined = []
     seen = set()
-    unique_docs = []
 
-    for d in docs:
-        text = d.page_content.strip()
-        if text not in seen:
-            seen.add(text)
-            unique_docs.append(d)
+    for d in allowed_docs + keyword_ranked:
+        content = d.page_content[:100]
+        if content not in seen:
+            combined.append(d)
+            seen.add(content)
 
-    docs = unique_docs
+    # -------------------------
+    # 4. FINAL TOP-K
+    # -------------------------
+    final_docs = combined[:5]
 
-    # ─── STEP 5: Debug Retrieved Content ───────────────────────
-    print("\n[RETRIEVER] FINAL RETRIEVED DOCUMENTS:\n")
+    print(f"\n[RESULT] Final docs: {len(final_docs)}")
 
-    for i, d in enumerate(docs[:10]):  # show top 10
-        print(f"\n--- Document {i+1} ---")
-        print(d.page_content[:300])
+    for i, d in enumerate(final_docs):
+        print(f"\n--- Doc {i+1} ---")
+        safe_preview = d.page_content[:150].encode('cp1252', errors='replace').decode('cp1252')
+        print(safe_preview)
         print("Metadata:", d.metadata)
 
-    print(f"\n[RETRIEVER] Total unique docs retrieved: {len(docs)}")
-
-    return docs
+    return final_docs

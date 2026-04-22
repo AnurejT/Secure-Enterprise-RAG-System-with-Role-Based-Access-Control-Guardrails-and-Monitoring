@@ -48,7 +48,11 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
     setQuery("");
     setLoading(true);
     try {
-      const res = await axios.post(`${API}/query`, { query: trimmed, role });
+      const res = await axios.post(`${API}/query`, { query: trimmed, role }, {
+        headers: {
+          "Authorization": `Bearer ${user.token}`
+        }
+      });
       setMessages((prev) => [...prev, { type: "bot", text: res.data.answer, sources: res.data.sources || [] }]);
     } catch {
       setMessages((prev) => [...prev, { type: "error", text: "⚠️ Failed to reach the server. Is the backend running?" }]);
@@ -68,8 +72,15 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
     setUploadMsg(`Uploading "${file.name}"…`);
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("role", role); // 🔥 CRITICAL FIX: append role
+
     try {
-      await axios.post(`${API}/upload`, formData, { headers: { "Content-Type": "multipart/form-data" } });
+      await axios.post(`${API}/upload`, formData, { 
+        headers: { 
+          "Content-Type": "multipart/form-data",
+          "Authorization": `Bearer ${user.token}`
+        } 
+      });
       setUploadStatus("success");
       setUploadMsg(`✅ "${file.name}" uploaded & indexed!`);
     } catch (err) {

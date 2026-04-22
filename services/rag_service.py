@@ -2,66 +2,30 @@
 
 from rag.retriever import get_relevant_docs
 from rag.llm import get_llm_response
-from rbac.access_control import filter_docs_by_role
+from guardrails.filters import validate_input, validate_output
 
 
-# ─── QUERY CLASSIFIER (RULE-BASED) ─────────────
-def classify_query_role(query):
-    q = query.lower()
-
-    if any(w in q for w in ["$", "spend", "budget", "expense", "payment", "approval"]):
-        return "finance"
-
-    if any(w in q for w in ["salary", "employee", "leave"]):
-        return "hr"
-
-    if any(w in q for w in ["ads", "campaign", "marketing"]):
-        return "marketing"
-
-    if any(w in q for w in ["system", "software"]):
-        return "engineering"
-
-    return "general"
-
-
-# ─── QUERY REWRITE ───────────────────────────
-def rewrite_query(query):
-    prompt = f"""
-Convert this question into search keywords.
-
-Example:
-"Can a department spend more than $5000?"
-→ finance expense approval limit 5000 policy
-
-Query:
-{query}
-
-Answer:
-"""
-    result = get_llm_response(prompt)
-    rewritten = result["content"].strip()
-
-    print("[REWRITE]:", rewritten)
-
-    return rewritten
-
-
-# ─── MAIN PIPELINE ───────────────────────────
 def process_query(user_query, role="employee"):
-
     print("\n==============================")
     print("[QUERY]:", user_query)
     print("[USER ROLE]:", role)
     print("==============================")
 
-    # 1️⃣ Rewrite query
-    rewritten_query = rewrite_query(user_query)
+    # -------------------------
+    # 🛡️ INPUT GUARDRAILS
+    # -------------------------
+    is_valid, message = validate_input(user_query)
 
-    # 2️⃣ Retrieve documents
-    docs1 = get_relevant_docs(user_query)
-    docs2 = get_relevant_docs(rewritten_query)
+    if not is_valid:
+        return {
+            "answer": message,
+            "sources": []
+        }
 
-    docs = docs1 + docs2
+    # -------------------------
+    # 🔍 RETRIEVAL
+    # -------------------------
+    docs = get_relevant_docs(user_query, role)
 
     if not docs:
         return {
@@ -69,70 +33,64 @@ def process_query(user_query, role="employee"):
             "sources": []
         }
 
-    # DEBUG BEFORE RBAC
-    print("\n[BEFORE RBAC]")
-    for d in docs[:5]:
-        print(d.page_content[:100])
-        print("DEPT:", d.metadata.get("department"))
-
-    # 3️⃣ RBAC FILTER
-    docs = filter_docs_by_role(docs, role)
-
-    if not docs:
-        return {
-            "answer": "No information available in the documents accessible to your role.",
-            "sources": []
-        }
-
-    # DEBUG AFTER RBAC
-    print("\n[AFTER RBAC]")
-    for d in docs[:5]:
-        print(d.page_content[:100])
-        print("DEPT:", d.metadata.get("department"))
-
-    # 4️⃣ Remove duplicates
-    seen = set()
-    unique_docs = []
-
+    # -------------------------
+    # 📄 CONTEXT BUILDING
+    # -------------------------
+    context_chunks = []
     for d in docs:
-        text = d.page_content.strip()
-        if text not in seen:
-            seen.add(text)
-            unique_docs.append(d)
+        context_chunks.append(d.page_content.strip())
 
-    docs = unique_docs[:5]
+    context = "\n\n---\n\n".join(context_chunks)
 
-    # 5️⃣ Context
-    context = "\n\n".join([d.page_content for d in docs])
-
-    print("\n[FINAL CONTEXT]\n", context[:800])
-
-    # 6️⃣ LLM Answer
+    # -------------------------
+    # 🧠 STRONG PROMPT (ANTI-HALLUCINATION)
+    # -------------------------
     prompt = f"""
-You are a secure enterprise AI assistant.
+You are a STRICT enterprise AI assistant.
 
-RULES:
-- Answer ONLY from context
-- Do NOT assume anything
-- If not found, reply EXACTLY:
+You MUST follow these rules:
+
+1. Answer ONLY using the provided context
+2. DO NOT use prior knowledge
+3. DO NOT guess or infer
+4. If the answer is not explicitly present, respond EXACTLY:
 "No information available in the documents accessible to your role."
+5. Keep answer concise and factual
 
-Context:
+---------------------
+CONTEXT:
 {context}
+---------------------
 
-Question:
+QUESTION:
 {user_query}
 
-Answer:
+FINAL ANSWER:
 """
 
-    result = get_llm_response(prompt)
-    answer = result["content"].strip()
+    # -------------------------
+    # 🤖 LLM CALL
+    # -------------------------
+    result = get_llm_response(prompt, role=role, query=user_query)
 
-    if "no information" in answer.lower():
-        answer = "No information available in the documents accessible to your role."
+    answer = result.get("content", "").strip()
+
+    # -------------------------
+    # 🛡️ OUTPUT GUARDRAILS
+    # -------------------------
+    answer = validate_output(answer, context)
+
+    # -------------------------
+    # 📊 SOURCE CLEANING
+    # -------------------------
+    sources = []
+    for d in docs:
+        sources.append({
+            "source": d.metadata.get("source"),
+            "role_allowed": d.metadata.get("role_allowed")
+        })
 
     return {
         "answer": answer,
-        "sources": [d.metadata for d in docs]
+        "sources": sources
     }

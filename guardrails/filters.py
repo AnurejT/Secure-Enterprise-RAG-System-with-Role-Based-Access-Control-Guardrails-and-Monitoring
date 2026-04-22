@@ -57,3 +57,12 @@ def input_guardrail(query: str) -> bool:
     if is_irrelevant_query(query):
         return False
     return True
+
+# ✅ Aliases to match rag_service.py expectations
+def validate_input(query: str):
+    valid = input_guardrail(query)
+    msg = "" if valid else "Query blocked by security guardrails."
+    return valid, msg
+
+def validate_output(answer: str, context: str = "") -> str:
+    return enforce_output_constraints(answer)

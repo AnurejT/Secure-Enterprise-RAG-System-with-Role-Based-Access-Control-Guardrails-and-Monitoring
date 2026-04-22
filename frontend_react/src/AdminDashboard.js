@@ -57,7 +57,7 @@ function ScoreBar({ label, value, color }) {
 }
 
 // ─── Monitoring Panel ─────────────────────────────────────────────
-function MonitoringPanel() {
+function MonitoringPanel({ token }) {
   const [metrics, setMetrics]   = useState(null);
   const [history, setHistory]   = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -66,8 +66,8 @@ function MonitoringPanel() {
   const fetchData = useCallback(async () => {
     try {
       const [mRes, hRes] = await Promise.all([
-        axios.get(`${API}/monitoring/metrics`),
-        axios.get(`${API}/monitoring/history?n=15`),
+        axios.get(`${API}/monitoring/metrics`, { headers: { "Authorization": `Bearer ${token}` } }),
+        axios.get(`${API}/monitoring/history?n=15`, { headers: { "Authorization": `Bearer ${token}` } }),
       ]);
       setMetrics(mRes.data);
       setHistory(hRes.data.history || []);
@@ -279,7 +279,7 @@ function fmtSize(kb) {
 }
 
 // ─── File Manager Panel ───────────────────────────────────────────
-function FileManagerPanel() {
+function FileManagerPanel({ token }) {
   const [files, setFiles]               = useState([]);
   const [loading, setLoading]           = useState(true);
   const [uploading, setUploading]       = useState(false);
@@ -287,12 +287,15 @@ function FileManagerPanel() {
   const [deletingFile, setDeletingFile] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null); // filename waiting confirm
   const [dragOver, setDragOver]         = useState(false);
+  const [selectedRole, setSelectedRole] = useState("employee"); // ✅ Added role selector state
   const fileInputRef = useRef(null);
 
   const fetchFiles = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API}/files`);
+      const res = await axios.get(`${API}/files`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
       setFiles(res.data.files || []);
     } catch {
       setFiles([]);
@@ -313,8 +316,15 @@ function FileManagerPanel() {
     setUploadMsg({ type: "info", text: `Uploading & indexing "${file.name}"…` });
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("role", selectedRole); // 🔥 Append role from dropdown
+
     try {
-      await axios.post(`${API}/upload`, formData, { headers: { "Content-Type": "multipart/form-data" } });
+      await axios.post(`${API}/upload`, formData, { 
+         headers: { 
+           "Content-Type": "multipart/form-data",
+           "Authorization": `Bearer ${token}`
+         } 
+      });
       setUploadMsg({ type: "success", text: `✅ "${file.name}" uploaded & indexed successfully!` });
       fetchFiles();
     } catch (err) {
@@ -328,7 +338,9 @@ function FileManagerPanel() {
     setDeletingFile(filename);
     setConfirmDelete(null);
     try {
-      await axios.delete(`${API}/files/${encodeURIComponent(filename)}`);
+      await axios.delete(`${API}/files/${encodeURIComponent(filename)}`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
       setUploadMsg({ type: "success", text: `🗑️ "${filename}" deleted and removed from vector DB.` });
       fetchFiles();
     } catch (err) {
@@ -349,6 +361,22 @@ function FileManagerPanel() {
       <div>
         <h2 className="text-2xl font-bold text-gray-900 mb-1">Manage Files</h2>
         <p className="text-sm text-gray-500">Upload new PDFs or delete existing ones from the knowledge base.</p>
+      </div>
+
+      {/* ✅ ROLE SELECTOR */}
+      <div className="flex items-center gap-3">
+        <label className="text-sm font-semibold text-gray-700">Assign Role to Document:</label>
+        <select
+          value={selectedRole}
+          onChange={(e) => setSelectedRole(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+        >
+          <option value="employee">👤 Employee</option>
+          <option value="finance">💰 Finance</option>
+          <option value="marketing">📣 Marketing</option>
+          <option value="hr">🧑‍💼 HR</option>
+          <option value="admin">🔐 Admin Only</option>
+        </select>
       </div>
 
       {/* ── Upload Drop Zone ── */}
@@ -507,10 +535,10 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
 
   // Live file count for the stats card
   useEffect(() => {
-    axios.get(`${API}/files`)
+    axios.get(`${API}/files`, { headers: { "Authorization": `Bearer ${user.token}` } })
       .then((res) => setFileCount(String(res.data.files?.length ?? "—")))
       .catch(() => {});
-  }, [activeNav]); // refresh when switching tabs
+  }, [activeNav, user.token]); // refresh when switching tabs
 
   const handleNav = (id) => {
     if (id === "chat")                          { onOpenChat(); return; }
@@ -624,14 +652,14 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
         {/* ── File Manager view ── */}
         {activeNav === "files" && (
           <div className="px-8 py-8">
-            <FileManagerPanel />
+            <FileManagerPanel token={user.token} />
           </div>
         )}
 
         {/* ── Monitoring view ── */}
         {activeNav === "monitoring" && (
           <div className="px-8 py-8">
-            <MonitoringPanel />
+            <MonitoringPanel token={user.token} />
           </div>
         )}
 

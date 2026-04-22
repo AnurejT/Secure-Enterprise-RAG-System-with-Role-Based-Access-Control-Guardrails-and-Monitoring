@@ -1,3 +1,12 @@
+import sys
+import io
+
+# 🔥 CRITICAL FIX: Force UTF-8 encoding for stdout/stderr to prevent Windows charmap crashes with emojis
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='backslashreplace')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='backslashreplace')
+
 import os
 from flask import Flask
 from flask_cors import CORS
