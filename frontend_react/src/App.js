@@ -7,11 +7,12 @@ import AdminDashboard from "./AdminDashboard";
 const API = "http://localhost:5000/api";
 
 const ROLES = [
-  { value: "employee",  label: "👤 Employee",  color: "#6366f1", canUpload: false },
-  { value: "finance",   label: "💰 Finance",   color: "#10b981", canUpload: true  },
-  { value: "marketing", label: "📣 Marketing", color: "#f59e0b", canUpload: true  },
-  { value: "hr",        label: "🧑‍💼 HR",        color: "#8b5cf6", canUpload: true  },
-  { value: "admin",     label: "🔐 Admin",     color: "#ef4444", canUpload: true  },
+  { value: "general",     label: "👤 General",     color: "#6366f1", canUpload: false },
+  { value: "finance",     label: "💰 Finance",     color: "#10b981", canUpload: true  },
+  { value: "marketing",   label: "📣 Marketing",   color: "#f59e0b", canUpload: true  },
+  { value: "hr",          label: "🧑‍💼 HR",          color: "#8b5cf6", canUpload: true  },
+  { value: "engineering", label: "⚙️ Engineering", color: "#0ea5e9", canUpload: true  },
+  { value: "admin",       label: "🔐 Admin",       color: "#ef4444", canUpload: true  },
 ];
 
 const ADMIN_ROLES    = ROLES;
@@ -23,12 +24,11 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
   const [query, setQuery]         = useState("");
   const [messages, setMessages]   = useState([]);
   const [loading, setLoading]     = useState(false);
-  const [uploadStatus, setUploadStatus] = useState(null);
-  const [uploadMsg, setUploadMsg] = useState("");
-  const [dragOver, setDragOver]   = useState(false);
-  
-  const fileInputRef = useRef(null);
+  const [roleToast, setRoleToast] = useState(null);
+  const [pendingRole, setPendingRole] = useState(null); // role awaiting confirmation
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const chatEndRef   = useRef(null);
+  const toastTimerRef = useRef(null);
 
   const allowedRoles = isAdmin ? ADMIN_ROLES : EMPLOYEE_ROLES.filter((r) => r.value === user.role);
 
@@ -89,13 +89,12 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
 
         const chunk = decoder.decode(value, { stream: true });
         
-        // Handle final sources chunk
+        // Handle metadata chunk
         if (chunk.includes("SOURCES_JSON:")) {
-          const parts = chunk.split("SOURCES_JSON:");
-          fullText += parts[0];
+          const [textBefore, jsonStr] = chunk.split("SOURCES_JSON:");
+          fullText += textBefore;
           try {
-            const sources = JSON.parse(parts[1]);
-            botMsg.sources = sources;
+            botMsg.sources = JSON.parse(jsonStr.trim());
           } catch (e) {
             console.error("Failed to parse sources", e);
           }
@@ -127,39 +126,41 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendQuery(); }
   };
 
-  const uploadFile = async (file) => {
-    if (!file) return;
-    const ALLOWED = [".pdf", ".docx", ".csv", ".xlsx", ".md"];
-    const ext = "." + file.name.split(".").pop().toLowerCase();
-    if (!ALLOWED.includes(ext)) {
-      setUploadStatus("error");
-      setUploadMsg(`Unsupported file type: ${ext}. Supported: PDF, DOCX, CSV, XLSX`);
-      return;
-    }
+  const handleRoleSwitch = (newRole) => {
+    if (newRole === role) return;
+    setPendingRole(newRole); // show confirmation dialog
+  };
 
-    setUploadStatus("uploading");
-    setUploadMsg(`Uploading "${file.name}"…`);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("role", role);
+  const confirmRoleSwitch = () => {
+    if (!pendingRole) return;
+    const newRoleMeta = ROLES.find((r) => r.value === pendingRole);
+    setMessages((prev) => [
+      ...prev,
+      { type: "system", text: `🔀 Context switched to ${newRoleMeta?.label} — queries now scoped to ${newRoleMeta?.label} documents.` }
+    ]);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setRoleToast({ label: newRoleMeta?.label, color: newRoleMeta?.color });
+    toastTimerRef.current = setTimeout(() => setRoleToast(null), 3500);
+    setRole(pendingRole);
+    setPendingRole(null);
+  };
 
+  const cancelRoleSwitch = () => setPendingRole(null);
+  
+  const clearHistory = async () => {
     try {
-      await axios.post(`${API}/upload`, formData, { 
-        headers: { 
-          "Content-Type": "multipart/form-data",
-          "Authorization": `Bearer ${user.token}`
-        } 
+      await axios.delete(`${API}/history`, {
+        headers: { "Authorization": `Bearer ${user.token}` }
       });
-      setUploadStatus("success");
-      setUploadMsg(`✅ "${file.name}" uploaded & indexed!`);
+      setMessages([]);
+      setShowClearConfirm(false);
     } catch (err) {
-      setUploadStatus("error");
-      setUploadMsg(`❌ Upload failed: ${err.response?.data?.error || err.message}`);
+      console.error("Failed to clear history", err);
+      alert("Failed to clear history");
     }
   };
 
   const selectedRole = ROLES.find((r) => r.value === role);
-  const canUpload    = selectedRole?.canUpload ?? false;
 
   return (
     <div className="app">
@@ -189,7 +190,7 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
                 key={r.value}
                 className={`role-btn ${role === r.value ? "active" : ""}`}
                 style={{ "--role-color": r.color }}
-                onClick={() => setRole(r.value)}
+                onClick={() => handleRoleSwitch(r.value)}
               >
                 {r.label}
               </button>
@@ -201,34 +202,29 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
           </div>
         )}
 
-        <div className="section-title" style={{ marginTop: 28 }}>Upload Document</div>
-        {canUpload ? (
-          <div
-            className={`drop-zone ${dragOver ? "drag-over" : ""} ${uploadStatus === "uploading" ? "uploading" : ""}`}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadFile(e.dataTransfer.files[0]); }}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <input ref={fileInputRef} type="file" accept=".pdf,.docx,.csv,.xlsx,.md" style={{ display: "none" }} onChange={(e) => uploadFile(e.target.files[0])} />
-            {uploadStatus === "uploading" ? "Processing..." : "Click or drag & drop PDF"}
-          </div>
-        ) : (
-          <div className="upload-locked">🔒 Access Restricted</div>
-        )}
         <div className="sidebar-footer">● Backend connected</div>
         <button onClick={onLogout} className="logout-btn-sidebar">← Logout</button>
       </aside>
 
       <main className="chat-area">
         <div className="chat-header">
-          <div className="chat-title">Ask your enterprise documents</div>
-          <div className="chat-subtitle">Querying as <span className="role-badge" style={{ background: selectedRole?.color }}>{selectedRole?.label}</span></div>
+          <div>
+            <div className="chat-title">Ask your enterprise documents</div>
+            <div className="chat-subtitle">Querying as <span className="role-badge" style={{ background: selectedRole?.color }}>{selectedRole?.label}</span></div>
+          </div>
+          <button className="clear-btn" onClick={() => setShowClearConfirm(true)}>🗑️ Clear Chat</button>
         </div>
 
         <div className="messages">
           {messages.length === 0 && <div className="empty-state">💬 Ask something to start...</div>}
           {messages.map((m, i) => (
+            m.type === "system" ? (
+              <div key={i} className="role-switch-divider">
+                <span className="role-switch-line" />
+                <span className="role-switch-label">{m.text}</span>
+                <span className="role-switch-line" />
+              </div>
+            ) : (
             <div key={i} className={`msg-row ${m.type}`}>
               <div className="msg-avatar">{m.type === "user" ? "👤" : "🤖"}</div>
               <div className="msg-bubble">
@@ -238,13 +234,14 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
                     <span className="sources-label">Sources:</span>
                     {m.sources.map((s, si) => (
                       <span key={si} className="source-chip">
-                        📎 {s.source ? s.source.split(/[/\\]/).pop() : "Doc"} (Page {s.page || '?'})
+                        📎 {s.source ? s.source.split(/[/\\]/).pop() : "Doc"} {s.page !== undefined ? `(Page ${s.page})` : ""}
                       </span>
                     ))}
                   </div>
                 )}
               </div>
             </div>
+            )
           ))}
           {loading && !messages[messages.length-1]?.text && (
             <div className="msg-row bot"><div className="msg-avatar">🤖</div><div className="msg-bubble typing"><span/><span/><span/></div></div>
@@ -265,6 +262,57 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
           <button className="send-btn" onClick={sendQuery} disabled={loading || !query.trim()}>Send ↑</button>
         </div>
       </main>
+
+      {/* ── Role-switch floating toast ── */}
+      {roleToast && (
+        <div className="role-toast" style={{ borderColor: roleToast.color, boxShadow: `0 8px 32px ${roleToast.color}33` }}>
+          <span className="role-toast-dot" style={{ background: roleToast.color }} />
+          <span>Switched to <strong style={{ color: roleToast.color }}>{roleToast.label}</strong> context</span>
+          <span className="role-toast-sub">Queries now scoped to {roleToast.label} documents</span>
+        </div>
+      )}
+
+      {/* ── Role-switch confirmation dialog ── */}
+      {pendingRole && (() => {
+        const from = ROLES.find((r) => r.value === role);
+        const to   = ROLES.find((r) => r.value === pendingRole);
+        return (
+          <div className="role-confirm-overlay">
+            <div className="role-confirm-card">
+              <div className="role-confirm-icon">🔀</div>
+              <h3 className="role-confirm-title">Switch Department Context?</h3>
+              <p className="role-confirm-desc">
+                You are about to switch from
+                <span className="role-confirm-badge" style={{ background: from?.color }}>{from?.label}</span>
+                to
+                <span className="role-confirm-badge" style={{ background: to?.color }}>{to?.label}</span>
+              </p>
+              <p className="role-confirm-sub">All new queries will be scoped to <strong>{to?.label}</strong> documents.</p>
+              <div className="role-confirm-actions">
+                <button className="role-confirm-no" onClick={cancelRoleSwitch}>Cancel</button>
+                <button className="role-confirm-yes" style={{ background: to?.color }} onClick={confirmRoleSwitch}>Yes, Switch</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {/* ── Clear history confirmation dialog ── */}
+      {showClearConfirm && (
+        <div className="role-confirm-overlay">
+          <div className="role-confirm-card">
+            <div className="role-confirm-icon" style={{ color: "#ef4444" }}>🗑️</div>
+            <h3 className="role-confirm-title">Clear All Chat History?</h3>
+            <p className="role-confirm-desc">
+              This will permanently delete all messages for your account.
+            </p>
+            <p className="role-confirm-sub"><strong>This action cannot be undone.</strong></p>
+            <div className="role-confirm-actions">
+              <button className="role-confirm-no" onClick={() => setShowClearConfirm(false)}>Cancel</button>
+              <button className="role-confirm-yes" style={{ background: "#ef4444" }} onClick={clearHistory}>Yes, Clear Everything</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

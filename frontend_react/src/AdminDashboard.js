@@ -7,15 +7,16 @@ const API = "http://localhost:5000/api";
 const STATS = [
   { label: "Indexed Documents", value: "—",      icon: "📄", change: "Live count", color: "#3b82f6", bg: "#eff6ff" },
   { label: "Queries Today",     value: "47",      icon: "🔍", change: "+12 vs yesterday", color: "#10b981", bg: "#ecfdf5" },
-  { label: "Active Departments",value: "4",       icon: "🏢", change: "All online",    color: "#8b5cf6", bg: "#f5f3ff" },
+  { label: "Active Departments",value: "5",       icon: "🏢", change: "All online",    color: "#8b5cf6", bg: "#f5f3ff" },
   { label: "System Status",     value: "Online",  icon: "⚡", change: "100% uptime",  color: "#f59e0b", bg: "#fffbeb" },
 ];
 
 const DEPARTMENTS = [
-  { name: "Finance",   icon: "💰", role: "finance",   color: "#10b981", accessLevel: "L3 Restricted", docTypes: "Invoices, Reports, Budgets", queryCount: 28, status: "Secure" },
-  { name: "HR",        icon: "🧑‍💼", role: "hr",        color: "#8b5cf6", accessLevel: "L2 Internal",   docTypes: "Policies, Payroll, CVs",     queryCount: 15, status: "Active" },
-  { name: "Marketing", icon: "📣", role: "marketing", color: "#f59e0b", accessLevel: "L1 Public",     docTypes: "Campaigns, Data, Ads",       queryCount: 42, status: "Active" },
-  { name: "Employee",  icon: "👤", role: "employee",  color: "#6366f1", accessLevel: "L1 Public",     docTypes: "General Info, Manuals",      queryCount: 94, status: "Active" },
+  { name: "Finance",     icon: "💰", role: "finance",     color: "#10b981", accessLevel: "L3 Restricted", docTypes: "Invoices, Reports, Budgets",       queryCount: 28, status: "Secure" },
+  { name: "HR",          icon: "🧑‍💼", role: "hr",          color: "#8b5cf6", accessLevel: "L2 Internal",   docTypes: "Policies, Payroll, CVs",        queryCount: 15, status: "Active" },
+  { name: "Marketing",   icon: "📣", role: "marketing",   color: "#f59e0b", accessLevel: "L1 Public",     docTypes: "Campaigns, Data, Ads",          queryCount: 42, status: "Active" },
+  { name: "General",     icon: "👤", role: "general",     color: "#6366f1", accessLevel: "L1 Public",     docTypes: "General Info, Manuals",         queryCount: 94, status: "Active" },
+  { name: "Engineering", icon: "⚙️", role: "engineering", color: "#0ea5e9", accessLevel: "L2 Internal",   docTypes: "Technical Docs, Architecture",  queryCount: 31, status: "Active" },
 ];
 
 const ACTIVITY = [
@@ -287,25 +288,20 @@ function FileManagerPanel({ token }) {
   const [deletingFile, setDeletingFile]   = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [dragOver, setDragOver]           = useState(false);
-  const [selectedRole, setSelectedRole]   = useState("employee");
+  const [selectedRole, setSelectedRole]   = useState("general");
   const [fileToUpload, setFileToUpload]   = useState(null);
   const [searchQuery, setSearchQuery]     = useState("");
-  
-  // States used by sorting/filtering remnants in JSX (kept for compatibility)
-  const [filterDept, setFilterDept]       = useState("all");
-  const [sortKey, setSortKey]             = useState("name");
-  const [sortDir, setSortDir]             = useState("asc");
 
   const fileInputRef = useRef(null);
 
   const ROLE_META = {
-    finance:   { label: "Finance",    icon: "💰", color: "#10b981", bg: "#ecfdf5", border: "#a7f3d0", text: "#065f46" },
-    hr:        { label: "HR",         icon: "🧑‍💼", color: "#8b5cf6", bg: "#f5f3ff", border: "#ddd6fe", text: "#4c1d95" },
-    marketing: { label: "Marketing",  icon: "📣", color: "#f59e0b", bg: "#fffbeb", border: "#fde68a", text: "#78350f" },
-    employee:  { label: "Employee",   icon: "👤", color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe", text: "#3730a3" },
-    admin:     { label: "Admin Only", icon: "🔐", color: "#3b82f6", bg: "#eff6ff", border: "#bfdbfe", text: "#1e3a8a" },
+    finance:     { label: "Finance",     icon: "💰", color: "#10b981", bg: "#ecfdf5", border: "#a7f3d0", text: "#065f46" },
+    hr:          { label: "HR",          icon: "🧑‍💼", color: "#8b5cf6", bg: "#f5f3ff", border: "#ddd6fe", text: "#4c1d95" },
+    marketing:   { label: "Marketing",   icon: "📣", color: "#f59e0b", bg: "#fffbeb", border: "#fde68a", text: "#78350f" },
+    general:     { label: "General",     icon: "👤", color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe", text: "#3730a3" },
+    engineering: { label: "Engineering", icon: "⚙️", color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd", text: "#0c4a6e" },
   };
-  const roleOrder = ["finance", "hr", "marketing", "employee", "admin"];
+  const roleOrder = ["finance", "hr", "marketing", "engineering", "general"];
 
   const msgColors = {
     success: "bg-green-50 text-green-700 border-green-200",
@@ -353,7 +349,7 @@ function FileManagerPanel({ token }) {
     formData.append("role", selectedRole);
     try {
       await axios.post(`${API}/upload`, formData, {
-        headers: { "Content-Type": "multipart/form-data", "Authorization": `Bearer ${token}` }
+        headers: { "Authorization": `Bearer ${token}` }
       });
       setUploadMsg({ type: "success", text: `✅ "${file.name}" uploaded & indexed successfully!` });
       fetchFiles();
@@ -386,14 +382,13 @@ function FileManagerPanel({ token }) {
   const grouped = {};
   roleOrder.forEach(r => grouped[r] = []);
   filteredFiles.forEach(f => {
-    const r = (f.role || "employee").toLowerCase();
+    const r = (f.role || "general").toLowerCase();
     if (grouped[r]) grouped[r].push(f);
   });
 
   const maxRows = Math.max(...roleOrder.map(r => grouped[r].length), 1);
   const totalKb = files.reduce((s, f) => s + (f.size_kb || 0), 0);
   const totalSize = totalKb >= 1024 ? `${(totalKb / 1024).toFixed(1)} MB` : `${totalKb} KB`;
-  const activeDepts = roleOrder.filter(r => grouped[r].length > 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -430,8 +425,8 @@ function FileManagerPanel({ token }) {
               <option value="finance">Finance</option>
               <option value="hr">HR</option>
               <option value="marketing">Marketing</option>
-              <option value="employee">Employee</option>
-              <option value="admin">Admin Only</option>
+              <option value="general">General</option>
+              <option value="engineering">Engineering</option>
             </select>
           </div>
 
