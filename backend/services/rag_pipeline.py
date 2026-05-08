@@ -405,6 +405,10 @@ You are strictly prohibited from mixing data (numbers, names, facts) from differ
 ⚠ INCOMPLETE QUERY RULE:
 If the user's question is incomplete, extremely short (like a single letter or punctuation mark), or lacks a clear intent (e.g., ".s"), do NOT attempt to guess what they are asking. Do NOT summarize the context. Simply state: "Please provide a complete and specific question."
 
+⚠ NO DATA AVAILABLE RULE:
+If the user's question IS clear and specific, but the provided context does NOT contain the information needed to answer it, do NOT ask for a different question. Instead state: "This information isn't available in the {role} department's documents. You may need to check with the relevant department or request access to the appropriate data."
+Do NOT speculate, do NOT partially answer, and do NOT summarize unrelated context.
+
 ⚠ ANALYTICAL NARRATIVE RULE:
 IF AND ONLY IF the context contains a section titled "Expense Breakdown" or similar financial data:
 - You MUST synthesize the primary expense drivers.
@@ -429,6 +433,14 @@ HARD-BANNED items for security-aspect questions:
 - Answer ONLY from the provided context.
 - NO REPETITION: Each mechanism must be stated EXACTLY ONCE.
 - ACCURACY AND COMPLETENESS ARE CRITICAL: Ensure numbers are correctly paired with their specific descriptors.
+- NO REDUNDANT SOURCE NAMING: Do NOT name the document title or filename in the answer body (e.g., do NOT write "According to marketing_report_q3_2024.md..." or "The Comprehensive Marketing Report states..."). The source is already cited separately at the end. Just state the facts directly.
+- CONTEXTUAL ENRICHMENT RULE: After stating the directly requested fact, include 1-2 closely related impact metrics from the SAME topic in the context. "Same topic" means: adjacent bullet points under the same heading, or related objectives about the same feature (e.g., loyalty program enrollment + its impact on repeat purchases + customer satisfaction).
+  STRICT REQUIREMENT: Every number you include MUST appear verbatim in the provided context. If a metric does not have an explicit number in the context, do NOT include it and do NOT invent one.
+  Example — if context contains "Enrolled 40,000 customers... with 55% redeeming rewards" AND separately "resulting in a 10% increase in repeat purchases" AND "leading to a 5% improvement in customer satisfaction scores":
+    GOOD: "In Q3 2024, 40,000 customers enrolled in the loyalty program, with 55% redeeming rewards by quarter-end. This contributed to a 10% increase in repeat purchases compared to Q2 and a 5% improvement in customer satisfaction scores."
+  After stating the fact and its grounded impact metrics, STOP. Do NOT continue beyond this.
+- SAME-DEPARTMENT CROSS-REFERENCE RULE: If the context contains MULTIPLE sources from the SAME department (e.g., multiple quarterly reports), you MAY briefly reference data from a second source to show trends or comparisons. When doing so, clearly indicate the time period (e.g., "This grew from 40,000 in Q3 to 50,000 in Q4"). You must still list only the PRIMARY source in the [[SOURCES:]] block.
+- ANTI-HALLUCINATION RULE (CRITICAL): Before writing ANY number, percentage, or dollar amount in your answer, you MUST be able to point to the EXACT line in the CONTEXT where that number appears. If you cannot, do NOT write it. This applies to enrichment data too — if a number does not appear verbatim in the context, it is fabricated. If the context does not contain enough information to answer the question, use the NO DATA AVAILABLE RULE instead.
 - EXPLANATION/REASON RULE: You are an expert analyst.
     * CAUSE-EFFECT CHAIN: For "relationship" questions, you MUST show the full process/chain.
     * APPROVED PHRASING: The ONLY approved way to explain this relationship is: "Issues with delayed vendor payment cycles led to accounts payable delays, which created a temporary strain on cash liquidity during the latter half of 2024."
@@ -437,7 +449,7 @@ HARD-BANNED items for security-aspect questions:
 - OVERVIEW/SUMMARY RULE: For "overview", "summary", "report" etc.:
   1. Open with 1 framing sentence.
   2. Enumerate relevant components found WITHIN THE SINGLE cited source.
-- SPECIFIC QUERY RULE: For narrow queries, include ONLY the directly requested value.
+- SPECIFIC QUERY RULE: For narrow queries, state the requested value and its contextual enrichment. Nothing more.
 - NO MARKDOWN BOLD: Do NOT use ** for bold text. Write in plain prose.
 - TERMINATION: End with "END_OF_ANSWER". After this, list your EXACTLY ONE source filename in the format "[[SOURCES: filename]]".
 
@@ -670,7 +682,8 @@ def process_query(user_query: str, role: str = "general", employee_id: str | Non
     
     # If answer is a refusal, don't show any sources
     refusal_msg = "not available in the accessible documents"
-    if answer.strip().lower() == "no information available" or refusal_msg in answer.strip().lower() or "not accessible for your role" in answer.strip().lower():
+    ans_lower = answer.strip().lower()
+    if ans_lower == "no information available" or refusal_msg in ans_lower or "not accessible for your role" in ans_lower or "department's documents" in ans_lower:
         sources = []
 
     return {
@@ -736,7 +749,7 @@ def process_query_stream(user_query: str, role: str = "general", employee_id: st
         # Check for refusal early in the stream
         if not is_refusal and len(full_answer) < 200:
             lower_ans = full_answer.lower()
-            if "not available in the accessible documents" in lower_ans or "not accessible for your role" in lower_ans:
+            if "not available in the accessible documents" in lower_ans or "not accessible for your role" in lower_ans or "department's documents" in lower_ans:
                 is_refusal = True
 
         if not stop_streaming:
@@ -754,6 +767,20 @@ def process_query_stream(user_query: str, role: str = "general", employee_id: st
     if not stop_streaming and buffer:
         yield buffer
 
+    # ── Post-stream grounding validation ─────────────────────────────
+    # The streaming path previously bypassed validate_output(), allowing
+    # hallucinated numbers through. We now validate the full answer and
+    # send a CORRECTION chunk if grounding fails.
+    clean_answer = full_answer.split("END_OF_ANSWER")[0].strip()
+    clean_answer = re.sub(r"\[\[SOURCES:.*?\]\]", "", clean_answer).strip()
+    validated = validate_output(clean_answer, safe_ctx, safe_query)
+    
+    if validated != clean_answer:
+        # Grounding check failed — send correction to replace the streamed answer
+        print(f"[StreamGuardrail] Grounding check FAILED — replacing streamed answer")
+        yield f"\n\n---CORRECTION---{validated}"
+        is_refusal = True
+
     # Extract citations from the full answer
     sources_match = re.search(r"\[\[SOURCES:\s*(.*?)\]\]", full_answer)
     cited_files = []
@@ -761,26 +788,6 @@ def process_query_stream(user_query: str, role: str = "general", employee_id: st
         cited_files = [f.strip() for f in sources_match.group(1).split(",")]
         cited_files = cited_files[:1] # Strictly limit to 1 source
 
-    sources = []
-    seen_sources = set()
-    if cited_files:
-        for fname in cited_files:
-            if fname not in seen_sources:
-                for d in unique_docs:
-                    if os.path.basename(d.metadata.get("source", "")) == fname:
-                        entry = {"source": d.metadata.get("source")}
-                        if fname.lower().endswith(".pdf") and d.metadata.get("page") is not None:
-                            entry["page"] = d.metadata.get("page") + 1
-                        sources.append(entry)
-                        seen_sources.add(fname)
-                        break
-                else:
-                    sources.append({"source": fname})
-                    seen_sources.add(fname)
-    
-    if not sources:
-        sources = _build_sources(unique_docs, max_sources=1)
-    
     # Build sources based on what the LLM actually cited
     sources = []
     seen_sources = set()
@@ -805,7 +812,8 @@ def process_query_stream(user_query: str, role: str = "general", employee_id: st
     
     # If answer is a refusal, don't show any sources
     refusal_msg = "available in the accessible documents"
-    if is_refusal or "no information available" in full_answer.lower() or refusal_msg in full_answer.lower() or "please provide a complete and specific question" in full_answer.lower():
+    fa_lower = full_answer.lower()
+    if is_refusal or "no information available" in fa_lower or refusal_msg in fa_lower or "please provide a complete and specific question" in fa_lower or "department's documents" in fa_lower:
         sources = []
 
     yield f"SOURCES_JSON:{json.dumps(sources)}"

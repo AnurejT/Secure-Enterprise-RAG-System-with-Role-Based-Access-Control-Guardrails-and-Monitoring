@@ -98,6 +98,10 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
           } catch (e) {
             console.error("Failed to parse sources", e);
           }
+        } else if (chunk.includes("---CORRECTION---")) {
+          // Post-stream grounding check failed — replace entire answer
+          const corrected = chunk.split("---CORRECTION---")[1];
+          fullText = corrected;
         } else {
           fullText += chunk;
         }
