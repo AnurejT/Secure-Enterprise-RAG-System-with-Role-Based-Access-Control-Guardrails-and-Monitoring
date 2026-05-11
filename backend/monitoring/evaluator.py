@@ -34,7 +34,11 @@ def run_ragas_eval(question: str, answer: str, contexts: List[str]) -> dict:
     try:
         from datasets import Dataset
         from ragas import evaluate
-        from ragas.metrics import answer_relevancy, faithfulness, context_relevancy
+        from ragas.metrics.collections import (
+            answer_relevancy,
+            faithfulness,
+            context_precision,
+        )
 
         ragas_llm = _build_ragas_llm()
         ragas_emb = _build_ragas_embeddings()
@@ -42,7 +46,7 @@ def run_ragas_eval(question: str, answer: str, contexts: List[str]) -> dict:
         answer_relevancy.llm        = ragas_llm
         answer_relevancy.embeddings = ragas_emb
         faithfulness.llm            = ragas_llm
-        context_relevancy.llm       = ragas_llm
+        context_precision.llm       = ragas_llm
 
         dataset = Dataset.from_dict({
             "question": [question],
@@ -52,7 +56,7 @@ def run_ragas_eval(question: str, answer: str, contexts: List[str]) -> dict:
 
         result = evaluate(
             dataset,
-            metrics=[answer_relevancy, faithfulness, context_relevancy],
+            metrics=[answer_relevancy, faithfulness, context_precision],
             raise_exceptions=False,
         )
         scores = result.to_pandas().iloc[0].to_dict()
@@ -60,7 +64,7 @@ def run_ragas_eval(question: str, answer: str, contexts: List[str]) -> dict:
         return {
             "answer_relevancy":  _safe_float(scores.get("answer_relevancy")),
             "faithfulness":      _safe_float(scores.get("faithfulness")),
-            "context_relevancy": _safe_float(scores.get("context_relevancy")),
+            "context_relevancy": _safe_float(scores.get("context_precision")),
             "error": None,
         }
 

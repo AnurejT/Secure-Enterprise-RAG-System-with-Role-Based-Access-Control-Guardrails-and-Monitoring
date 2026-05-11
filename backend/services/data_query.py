@@ -34,6 +34,126 @@ def _format_employee_record(row: "pd.Series") -> str:
     return "\n".join(lines)
 
 
+# Keywords that indicate a name-based field lookup query
+_NAME_LOOKUP_FIELDS_RE = re.compile(
+    r"\b(employee id|emp id|id|role|salary|current salary|department|email|"
+    r"location|attendance|performance|manager|joining|leave|profile|details|record|info|information)\b",
+    re.I,
+)
+
+# Full name patterns: "for <Name>", "of <Name>", "named <Name>", "<Name>'s"
+_NAME_LOOKUP_RE = re.compile(
+    r"(?:for|of|named)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)"
+    r"|([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)'s\b",
+    re.I,
+)
+
+# Existence/duplicate check: "are there multiple employees named X?"
+_EXISTENCE_QUERY_RE = re.compile(
+    r"\b(are there|is there|multiple|more than one|duplicate|same name|how many employees named)\b",
+    re.I,
+)
+
+# First-name disambiguation: "which Priya works in Technology?"
+# Captures a single capitalized word (first name only) after which/who
+_FIRST_NAME_QUERY_RE = re.compile(
+    r"\b(?:which|who)\s+([A-Z][a-z]{2,})\b",
+    re.I,
+)
+
+
+def _format_name_lookup_answer(
+    matches: "pd.DataFrame",
+    requested_fields: list[str],
+    name: str,
+    is_existence: bool = False,
+) -> str:
+    """Format a name-based lookup result — handles single/multiple matches and existence queries."""
+    if matches.empty:
+        if is_existence:
+            return f"No, there is no employee named '{name}' in the HR dataset."
+        return f"According to the HR data, no employee named '{name}' was found."
+
+    # For existence queries show ID + Role + Department (no salary)
+    if is_existence:
+        if len(matches) == 1:
+            row = matches.iloc[0]
+            return (
+                f"No, there is only one employee named '{name}' in the HR dataset.\n\n"
+                f"1. Employee ID: {row.get('employee_id', 'N/A')}\n"
+                f"   Role: {row.get('role', 'N/A')}\n"
+                f"   Department: {row.get('department', 'N/A')}"
+            )
+        parts = [f"Yes, there are {len(matches)} employees named '{name}' in the HR dataset.\n"]
+        for i, (_, row) in enumerate(matches.iterrows(), 1):
+            parts.append(
+                f"{i}. Employee ID: {row.get('employee_id', 'N/A')}\n"
+                f"   Role: {row.get('role', 'N/A')}\n"
+                f"   Department: {row.get('department', 'N/A')}"
+            )
+        return "\n\n".join(parts)
+
+    # ── Standard field-based lookup ──────────────────────────────────────────
+    # Determine which specific fields to show (default to key identity fields)
+    show_all = not requested_fields or any(
+        f in requested_fields for f in ["record", "details", "info", "information", "profile"]
+    )
+
+    def _fmt_row(row: "pd.Series") -> str:
+        if show_all:
+            return _format_employee_record(row)
+        lines = []
+        if not requested_fields or "employee id" in requested_fields or "emp id" in requested_fields or "id" in requested_fields:
+            lines.append(f"- Employee ID: {row.get('employee_id', 'N/A')}")
+        if not requested_fields or "role" in requested_fields:
+            lines.append(f"- Role: {row.get('role', 'N/A')}")
+        if not requested_fields or any(f in requested_fields for f in ["salary", "current salary"]):
+            sal = row.get('salary', 'N/A')
+            sal_fmt = f"₹{sal:,.2f}" if isinstance(sal, float) else str(sal)
+            lines.append(f"- Current Salary: {sal_fmt}")
+        if "department" in requested_fields:
+            lines.append(f"- Department: {row.get('department', 'N/A')}")
+        if "email" in requested_fields:
+            lines.append(f"- Email: {row.get('email', 'N/A')}")
+        if "location" in requested_fields:
+            lines.append(f"- Location: {row.get('location', 'N/A')}")
+        if "attendance" in requested_fields:
+            lines.append(f"- Attendance %: {row.get('attendance_pct', 'N/A')}")
+        if "performance" in requested_fields:
+            lines.append(f"- Performance Rating: {row.get('performance_rating', 'N/A')}")
+        if "manager" in requested_fields:
+            lines.append(f"- Manager ID: {row.get('manager_id', 'N/A')}")
+        if "joining" in requested_fields:
+            lines.append(f"- Date of Joining: {row.get('date_of_joining', 'N/A')}")
+        if "leave" in requested_fields:
+            lines.append(f"- Leave Balance: {row.get('leave_balance', 'N/A')}")
+            lines.append(f"- Leaves Taken: {row.get('leaves_taken', 'N/A')}")
+        # Fallback: always show Employee ID + Role + Salary
+        if not lines:
+            sal = row.get('salary', 'N/A')
+            lines = [
+                f"- Employee ID: {row.get('employee_id', 'N/A')}",
+                f"- Role: {row.get('role', 'N/A')}",
+                f"- Current Salary: ₹{sal:,.2f}" if isinstance(sal, float) else f"- Current Salary: {sal}",
+            ]
+        return "\n".join(lines)
+
+    if len(matches) == 1:
+        row = matches.iloc[0]
+        emp_id = row.get('employee_id', 'N/A')
+        record = _fmt_row(row)
+        return f"According to the HR data, here is the information for {name} (Employee ID: {emp_id}):\n\n{record}"
+    else:
+        # Multiple employees share the same name
+        parts = [f"There are {len(matches)} employees named '{name}' in the HR dataset.\n"]
+        for i, (_, row) in enumerate(matches.iterrows(), 1):
+            emp_id = row.get('employee_id', 'N/A')
+            record = _fmt_row(row)
+            parts.append(f"{i}. Employee ID: {emp_id}\n{record}")
+        parts.append("\nSource:\n📎 hr_data.csv")
+        return "\n\n".join(parts)
+
+
 def handle_data_query(query: str, role: str) -> dict | None:
     """
     Detects if the query is a counting/aggregation query and runs pandas logic directly.
@@ -46,7 +166,51 @@ def handle_data_query(query: str, role: str) -> dict | None:
 
     q_lower = query.lower()
 
-    # ── Priority 0: Single-employee record lookup ────────────────────────────
+    # ── Priority 0a: Name-based lookup (field queries + existence queries) ───
+    # Handles:
+    #   - "What is the salary/role/id for Isha Chowdhury?"
+    #   - "Are there multiple employees named Isha Chowdhury?"
+    # Runs BEFORE PII masking ever touches the context.
+    name_match = _NAME_LOOKUP_RE.search(query)  # use original case for name
+    is_existence_query = bool(_EXISTENCE_QUERY_RE.search(q_lower))
+    has_field_keywords = bool(_NAME_LOOKUP_FIELDS_RE.search(q_lower))
+
+    if name_match and (has_field_keywords or is_existence_query):
+        # Skip aggregate/list queries (e.g. "list all employees named X")
+        is_agg = bool(re.search(
+            r"\b(list|show me all|how many|count|employees in|who are|which employees)\b",
+            q_lower
+        ))
+        # Existence queries are NOT aggregate, so only block true list/count queries
+        if not is_agg or is_existence_query:
+            candidate_name = (name_match.group(1) or name_match.group(2) or "").strip()
+            if len(candidate_name) >= 4:  # avoid matching single-word false positives
+                if not os.path.exists(HR_CSV_PATH):
+                    print(f"[DataQuery] Warning: {HR_CSV_PATH} not found.")
+                    return None
+                try:
+                    df = pd.read_csv(HR_CSV_PATH)
+                except Exception as e:
+                    print(f"[DataQuery] Error loading CSV for name lookup: {e}")
+                    return None
+
+                # Case-insensitive full-name match
+                matched = df[df["full_name"].str.strip().str.lower() == candidate_name.lower()]
+                if not matched.empty or is_existence_query:
+                    fields_asked = _NAME_LOOKUP_FIELDS_RE.findall(q_lower)
+                    answer = _format_name_lookup_answer(
+                        matched,
+                        [f.lower() for f in fields_asked],
+                        candidate_name,
+                        is_existence=is_existence_query,
+                    )
+                    print(f"[DataQuery] Name lookup matched '{candidate_name}': {len(matched)} record(s) (existence={is_existence_query})")
+                    return {
+                        "answer": answer,
+                        "sources": [{"source": "hr_data.csv"}],
+                    }
+
+    # ── Priority 0b: Employee ID-based record lookup ────────────────────────
     # Fire BEFORE any other intent detection so a query like
     # "full record for FINEMP1011" is answered deterministically.
     emp_id_match = re.search(r"\b(finemp\d+)\b", q_lower)
@@ -89,6 +253,86 @@ def handle_data_query(query: str, role: str) -> dict | None:
             "answer":  answer,
             "sources": [{"source": "hr_data.csv"}],
         }
+
+    # ── Priority 0c: First-name + department/role/location disambiguation ─────
+    # Handles: "Which Prisha works in Technology?"
+    #          "Who named Priya is a Software Engineer?"
+    # Returns a structured list with Employee ID, Full Name, Role, Department.
+    first_name_match = _FIRST_NAME_QUERY_RE.search(query)
+    if first_name_match:
+        candidate_first = first_name_match.group(1).strip()
+        # Must have at least one filter context (dept / role / location / works in)
+        has_filter_context = bool(re.search(
+            r"\b(works? in|is in|in the|department|role|location|based in|from the|team)\b",
+            q_lower
+        ))
+        if has_filter_context and len(candidate_first) >= 3:
+            if not os.path.exists(HR_CSV_PATH):
+                print(f"[DataQuery] Warning: {HR_CSV_PATH} not found.")
+            else:
+                try:
+                    df_fn = pd.read_csv(HR_CSV_PATH)
+                except Exception as e:
+                    print(f"[DataQuery] Error loading CSV for first-name lookup: {e}")
+                    df_fn = None
+
+                if df_fn is not None:
+                    # Filter by first name (case-insensitive)
+                    fn_mask = df_fn["full_name"].str.strip().str.split().str[0].str.lower() == candidate_first.lower()
+                    fn_df = df_fn[fn_mask].copy()
+
+                    # Apply department filter if present
+                    for dept in df_fn["department"].dropna().unique():
+                        if re.search(rf"\b{re.escape(dept.lower())}\b", q_lower):
+                            fn_df = fn_df[fn_df["department"] == dept]
+                            break
+
+                    # Apply role filter if present
+                    for r in df_fn["role"].dropna().unique():
+                        if re.search(rf"\b{re.escape(r.lower())}s?\b", q_lower):
+                            fn_df = fn_df[fn_df["role"] == r]
+                            break
+
+                    # Apply location filter if present
+                    for loc in df_fn["location"].dropna().unique():
+                        if re.search(rf"\b{re.escape(loc.lower())}\b", q_lower):
+                            fn_df = fn_df[fn_df["location"] == loc]
+                            break
+
+                    if not fn_df.empty:
+                        # Build structured numbered list
+                        dept_ctx = ""
+                        for dept in df_fn["department"].dropna().unique():
+                            if re.search(rf"\b{re.escape(dept.lower())}\b", q_lower):
+                                dept_ctx = f" in the {dept} department"
+                                break
+
+                        if len(fn_df) == 1:
+                            row = fn_df.iloc[0]
+                            answer = (
+                                f"The following employee named {candidate_first}{dept_ctx} was found:\n\n"
+                                f"1. {row['full_name']}\n"
+                                f"   Employee ID: {row.get('employee_id', 'N/A')}\n"
+                                f"   Role: {row.get('role', 'N/A')}\n"
+                                f"   Department: {row.get('department', 'N/A')}"
+                            )
+                        else:
+                            header = f"The following employees named {candidate_first}{dept_ctx} were found:\n"
+                            rows_txt = []
+                            for i, (_, row) in enumerate(fn_df.iterrows(), 1):
+                                rows_txt.append(
+                                    f"{i}. {row['full_name']}\n"
+                                    f"   Employee ID: {row.get('employee_id', 'N/A')}\n"
+                                    f"   Role: {row.get('role', 'N/A')}\n"
+                                    f"   Department: {row.get('department', 'N/A')}"
+                                )
+                            answer = header + "\n\n".join(rows_txt)
+
+                        print(f"[DataQuery] First-name lookup '{candidate_first}': {len(fn_df)} match(es)")
+                        return {
+                            "answer": answer,
+                            "sources": [{"source": "hr_data.csv"}],
+                        }
 
     # 1. Detect Intent: Is this a counting, listing, summing, averaging, or comparison query?
     is_compare = bool(re.search(r"\b(highest|lowest|most|least|top|bottom|oldest|youngest|earliest|latest|best|worst|senior)\b", q_lower))
@@ -209,9 +453,29 @@ def handle_data_query(query: str, role: str) -> dict | None:
 
     # Check for name filters (starts with, ends with, contains)
     name_filter = None
-    name_match = re.search(r"\b(?:name|full name)\s+(ends with|starts with|contains|is)\s+['\"]?(\w+)['\"]?\b", q_lower)
-    if name_match:
-        name_filter = (name_match.group(1), name_match.group(2))
+    name_match_filter = re.search(r"\b(?:name|full name)\s+(ends with|starts with|contains|is)\s+['\"]?(\w+)['\"]?\b", q_lower)
+    if name_match_filter:
+        name_filter = (name_match_filter.group(1), name_match_filter.group(2))
+
+    # Check for surname / last-name filter
+    # Matches: surname "Desai", last name 'Desai', share the same surname "Desai"
+    surname_filter = None
+    is_surname_query = bool(re.search(
+        r"\b(surname|last\s+name|last_name|family\s+name|share\s+the\s+same|same\s+surname|same\s+last\s+name)\b",
+        q_lower
+    ))
+    if is_surname_query:
+        # Extract the quoted word, e.g. "Desai" or 'Desai'
+        sn_match = re.search(r"['\"]([A-Za-z]+)['\"]|\.([A-Za-z]{2,})\.|\ ([A-Z][a-z]+)\s*\?", query)
+        if not sn_match:
+            # Fallback: last capitalized word in the query that is not a common stop word
+            _STOPWORDS = {"How", "Many", "Which", "Who", "Are", "Is", "The", "In", "With",
+                          "Same", "Share", "Surname", "Last", "Name", "Employees", "Employee"}
+            words = [w for w in re.findall(r"[A-Z][a-z]+", query) if w not in _STOPWORDS]
+            if words:
+                surname_filter = words[-1]
+        else:
+            surname_filter = (sn_match.group(1) or sn_match.group(2) or sn_match.group(3) or "").strip()
 
     # Check for top/bottom N
     top_n = 1
@@ -249,6 +513,12 @@ def handle_data_query(query: str, role: str) -> dict | None:
         group_by_col = "role"
     elif re.search(r"\bwhich\s+location\b|\bwhat\s+location\b", q_lower):
         group_by_col = "location"
+    elif re.search(r"\b(which|what)\s+(manager|supervisor|lead|head)\b"
+                   r"|\bmanager.{0,30}(most|fewest|highest|lowest|most employees|fewest employees)\b"
+                   r"|\b(most|fewest).{0,20}(manager|supervisor)\b"
+                   r"|\bsupervise[sd]?\s+the\s+(most|fewest|highest|lowest)\b",
+                   q_lower):
+        group_by_col = "manager_id"
 
     filtered_df = df.copy()
     desc_parts = []
@@ -283,6 +553,13 @@ def handle_data_query(query: str, role: str) -> dict | None:
         elif mode == "is":
             filtered_df = filtered_df[filtered_df['full_name'].str.lower() == val.lower()]
             desc_parts.append(f"named '{val}'")
+
+    if surname_filter:
+        # Match against the last word of full_name (the surname)
+        filtered_df = filtered_df[
+            filtered_df['full_name'].str.strip().str.split().str[-1].str.lower() == surname_filter.lower()
+        ]
+        desc_parts.append(f"with surname '{surname_filter}'")
             
     for col, op, val in numeric_filters:
         col_display = col.replace('_', ' ')
@@ -327,8 +604,63 @@ def handle_data_query(query: str, role: str) -> dict | None:
         filtered_df = filtered_df.drop_duplicates(subset=["full_name"])
         
     if is_compare:
-        if group_by_col:
-            # Determine aggregation method
+        if group_by_col == "manager_id":
+            # ── Manager supervision ranking ─────────────────────────────────────
+            # Count direct reports per manager_id, then join back to get manager name
+            report_counts = (
+                filtered_df[filtered_df["manager_id"].notna()]
+                .groupby("manager_id")
+                .size()
+                .rename("report_count")
+            )
+            if report_counts.empty:
+                answer = "According to the HR data, no manager-employee relationships were found."
+            else:
+                is_fewest = bool(re.search(r"\b(fewest|least|lowest|minimum)\b", q_lower))
+                dir_word = "fewest" if is_fewest else "most"
+
+                if top_n > 1:
+                    # Top-N managers
+                    top_series = report_counts.nsmallest(top_n) if is_fewest else report_counts.nlargest(top_n)
+                    header = f"Top {len(top_series)} managers supervising the {dir_word} employees:\n"
+                    entries = []
+                    for rank, (mgr_id, count) in enumerate(top_series.items(), 1):
+                        mgr_rows = df[df["employee_id"].str.upper() == mgr_id.upper()]
+                        if not mgr_rows.empty:
+                            mgr = mgr_rows.iloc[0]
+                            entries.append(
+                                f"{rank}. {mgr['full_name']}\n"
+                                f"   Employee ID: {mgr_id}\n"
+                                f"   Role: {mgr.get('role', 'N/A')}\n"
+                                f"   Department: {mgr.get('department', 'N/A')}\n"
+                                f"   Employees Supervised: {count}"
+                            )
+                        else:
+                            entries.append(f"{rank}. {mgr_id} — Employees Supervised: {count}")
+                    answer = header + "\n\n".join(entries)
+                else:
+                    # Single top/bottom manager
+                    best_mgr_id = report_counts.idxmin() if is_fewest else report_counts.idxmax()
+                    best_count  = report_counts.min()    if is_fewest else report_counts.max()
+                    mgr_rows = df[df["employee_id"].str.upper() == best_mgr_id.upper()]
+                    if not mgr_rows.empty:
+                        mgr = mgr_rows.iloc[0]
+                        answer = (
+                            f"The manager supervising the {dir_word} employees is:\n\n"
+                            f"  {mgr['full_name']}\n"
+                            f"  Employee ID: {best_mgr_id}\n"
+                            f"  Role: {mgr.get('role', 'N/A')}\n"
+                            f"  Department: {mgr.get('department', 'N/A')}\n"
+                            f"  Employees Supervised: {best_count}"
+                        )
+                    else:
+                        answer = (
+                            f"The manager with the {dir_word} direct reports is {best_mgr_id} "
+                            f"with {best_count} employees supervised."
+                        )
+            print(f"[DataQuery] Manager supervision query: group_by=manager_id, top_n={top_n}")
+        elif group_by_col:
+            # ── Generic group-by (dept / role / location) ───────────────────────
             grouped = filtered_df.groupby(group_by_col)
             if is_avg and target_metric:
                 series = grouped[target_metric].mean()
@@ -350,7 +682,7 @@ def handle_data_query(query: str, role: str) -> dict | None:
                 best_val = series.max()
                 dir_word = "highest"
                 
-            answer = f"According to the HR data, the {group_by_col} with the {dir_word} {agg_type} is {best_idx} at {best_val:,.2f}."
+            answer = f"According to the HR data, the {group_by_col} with the {dir_word} {agg_type} is {best_idx} ({int(best_val):,})."
             print(f"[DataQuery] Matched compare intent. GroupBy {group_by_col}, Agg {agg_type}: {best_idx} ({best_val})")
         elif target_metric:
             # Row level min/max
@@ -377,28 +709,55 @@ def handle_data_query(query: str, role: str) -> dict | None:
                 
                 metric_display = target_metric.replace('_', ' ')
                 
+                def _fmt_metric_val(val, metric: str) -> str:
+                    """Format a metric value for display."""
+                    if hasattr(val, 'strftime'):
+                        return val.strftime('%d-%m-%Y')
+                    if metric == "salary" and isinstance(val, (int, float)):
+                        return f"₹{val:,.2f}"
+                    if isinstance(val, float):
+                        return f"{val:,.2f}"
+                    return str(val)
+
                 if top_n > 1:
                     if is_min_query:
                         best_rows = temp_df.nsmallest(top_n, target_metric)
                     else:
                         best_rows = temp_df.nlargest(top_n, target_metric)
-                    
-                    rows_list = best_rows.apply(lambda x: f"{x['full_name']} ({x['role']}, {x['department']}) on {x[target_metric].strftime('%d-%m-%Y') if hasattr(x[target_metric], 'strftime') else x[target_metric]}", axis=1).tolist()
-                    answer = f"According to the HR data, the top {len(rows_list)} employees with the {dir_word} {metric_display} are:\n" + "\n".join([f"{i+1}. {r}" for i, r in enumerate(rows_list)])
+
+                    dir_label = "lowest" if is_min_query else "highest"
+                    header = (
+                        f"Top {len(best_rows)} {dir_label}-{metric_display} employees"
+                        + (f" ({entity_desc})" if desc_parts else "")
+                        + " according to the HR dataset:\n"
+                    )
+                    entries = []
+                    for i, (_, row) in enumerate(best_rows.iterrows(), 1):
+                        val_display = _fmt_metric_val(row[target_metric], target_metric)
+                        entry = (
+                            f"{i}. {row['full_name']}\n"
+                            f"   Employee ID: {row.get('employee_id', 'N/A')}\n"
+                            f"   Role: {row.get('role', 'N/A')}\n"
+                            f"   Department: {row.get('department', 'N/A')}\n"
+                            f"   {metric_display.title()}: {val_display}"
+                        )
+                        entries.append(entry)
+                    answer = header + "\n\n".join(entries)
                 else:
                     if is_min_query:
                         best_row = temp_df.loc[temp_df[target_metric].idxmin()]
                     else:
                         best_row = temp_df.loc[temp_df[target_metric].idxmax()]
-                    
-                    emp_name = best_row['full_name']
-                    emp_role = best_row['role']
-                    emp_dept = best_row['department']
-                    best_val = best_row[target_metric]
-                    if hasattr(best_val, 'strftime'):
-                        best_val = best_val.strftime('%d-%m-%Y')
-                    
-                    answer = f"According to the HR data, the employee with the {dir_word} {metric_display} is {emp_name} ({emp_role}, {emp_dept}) with {metric_display} {best_val}."
+
+                    val_display = _fmt_metric_val(best_row[target_metric], target_metric)
+                    answer = (
+                        f"According to the HR data, the employee with the {dir_word} {metric_display} is:\n\n"
+                        f"  {best_row['full_name']}\n"
+                        f"  Employee ID: {best_row.get('employee_id', 'N/A')}\n"
+                        f"  Role: {best_row.get('role', 'N/A')}\n"
+                        f"  Department: {best_row.get('department', 'N/A')}\n"
+                        f"  {metric_display.title()}: {val_display}"
+                    )
             
             print(f"[DataQuery] Matched row compare intent. {target_metric}")
         else:
@@ -424,7 +783,17 @@ def handle_data_query(query: str, role: str) -> dict | None:
             answer = f"According to the HR data, there are no {entity_desc} to sum."
     elif is_count:
         count = len(filtered_df)
-        answer = f"According to the HR data, the total number of {entity_desc} is {count}."
+        if surname_filter and count > 0:
+            # For surname queries, include a list of matching employee names
+            names_list = "\n".join(f"- {row['full_name']}" for _, row in filtered_df.iterrows())
+            answer = (
+                f"There are {count} employee{'s' if count != 1 else ''} with the surname \"{surname_filter}\":\n\n"
+                f"{names_list}"
+            )
+        elif surname_filter and count == 0:
+            answer = f"According to the HR data, no employees with the surname \"{surname_filter}\" were found."
+        else:
+            answer = f"According to the HR data, the total number of {entity_desc} is {count}."
         print(f"[DataQuery] Matched count intent. Executed pandas count: {count}")
     elif is_list:
         if len(filtered_df) == 0:

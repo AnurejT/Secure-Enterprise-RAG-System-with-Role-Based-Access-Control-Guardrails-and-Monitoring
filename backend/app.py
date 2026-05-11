@@ -13,6 +13,7 @@ if sys.stderr.encoding != "utf-8":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="backslashreplace")
 
 import os
+# pyrefly: ignore [missing-import]
 from flask import Flask
 from flask_cors import CORS
 
