@@ -4,7 +4,7 @@ import "./App.css";
 import Login from "./Login";
 import AdminDashboard from "./AdminDashboard";
 
-const API = "http://localhost:5000/api";
+const API = "http://127.0.0.1:5000/api";
 
 const ROLES = [
   { value: "general",     label: "👤 General",     color: "#6366f1", canUpload: false },
@@ -28,6 +28,7 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
   const [pendingRole, setPendingRole] = useState(null); // role awaiting confirmation
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const chatEndRef   = useRef(null);
+  const inputRef     = useRef(null);
   const toastTimerRef = useRef(null);
 
   const allowedRoles = isAdmin ? ADMIN_ROLES : EMPLOYEE_ROLES.filter((r) => r.value === user.role);
@@ -147,6 +148,8 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
     toastTimerRef.current = setTimeout(() => setRoleToast(null), 3500);
     setRole(pendingRole);
     setPendingRole(null);
+    // Explicitly focus the input after switch
+    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   const cancelRoleSwitch = () => setPendingRole(null);
@@ -253,8 +256,9 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
           <div ref={chatEndRef} />
         </div>
 
-        <div className="input-bar">
+        <div className="input-bar" onClick={() => inputRef.current?.focus()}>
           <textarea
+            ref={inputRef}
             className="input-field"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -263,7 +267,7 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
             rows={1}
             disabled={loading}
           />
-          <button className="send-btn" onClick={sendQuery} disabled={loading || !query.trim()}>Send ↑</button>
+          <button className="send-btn" onClick={(e) => { e.stopPropagation(); sendQuery(); }} disabled={loading || !query.trim()}>Send ↑</button>
         </div>
       </main>
 

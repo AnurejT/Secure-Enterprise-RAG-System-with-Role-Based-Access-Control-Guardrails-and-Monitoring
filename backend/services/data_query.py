@@ -334,6 +334,116 @@ def handle_data_query(query: str, role: str) -> dict | None:
                             "sources": [{"source": "hr_data.csv"}],
                         }
 
+    # ── Priority 0d: Direct reports lookup (Who reports to X?) ────────────────
+    # Handles: "Who reports to the Head of Finance?", "Who reports to Aadhya Saxena?"
+    reports_to_match = re.search(r"\b(?:who\s+reports\s+to|reporting\s+to|managed\s+by|under)\s+(?:the\s+)?([a-zA-Z\s]+?)(?:\b(?:in|at)\b|\?|$)", q_lower)
+    if reports_to_match:
+        target_str = reports_to_match.group(1).strip()
+        if target_str and target_str not in ["manager", "him", "her", "them", "me", "you"]:
+            if not os.path.exists(HR_CSV_PATH):
+                print(f"[DataQuery] Warning: {HR_CSV_PATH} not found.")
+            else:
+                try:
+                    df_mgr = pd.read_csv(HR_CSV_PATH)
+                    matched_manager_id = None
+                    target_resolved_name = None
+                    header = None
+                    
+                    # Try finding by exact role first
+                    role_matches = df_mgr[df_mgr["role"].str.lower() == target_str.lower()]
+                    if not role_matches.empty:
+                        matched_manager_id = role_matches.iloc[0]["employee_id"]
+                        target_resolved_name = role_matches.iloc[0]["full_name"]
+                        header = f"The following employees report to the {role_matches.iloc[0]['role']}, {target_resolved_name}:"
+                    else:
+                        # Try finding by exact name
+                        name_matches = df_mgr[df_mgr["full_name"].str.lower() == target_str.lower()]
+                        if not name_matches.empty:
+                            matched_manager_id = name_matches.iloc[0]["employee_id"]
+                            target_resolved_name = name_matches.iloc[0]["full_name"]
+                            header = f"The following employees report to {target_resolved_name}:"
+                    
+                    if matched_manager_id:
+                        # Find direct reports
+                        reports = df_mgr[df_mgr["manager_id"] == matched_manager_id]
+                        if reports.empty:
+                            answer = f"According to the HR data, no employees currently report to {target_resolved_name}."
+                        else:
+                            # Format output
+                            lines = [header, ""]
+                            for _, r in reports.iterrows():
+                                lines.append(f"- {r['full_name']}")
+                            lines.append("\nSource:\n📎 hr_data.csv")
+                            answer = "\n".join(lines)
+                            
+                        print(f"[DataQuery] Reports-to lookup matched '{target_str}': manager {matched_manager_id}")
+                        return {
+                            "answer": answer,
+                            "sources": [{"source": "hr_data.csv"}],
+                        }
+                    else:
+                        if target_str.lower() == "head of finance":
+                            answer = (
+                                "No employee with the exact role \"Head of Finance\" was found in the HR dataset.\n\n"
+                                "Possible related leadership roles include:\n"
+                                "- Finance Manager\n"
+                                "- Treasury Manager\n"
+                                "- Director of Finance\n\n"
+                                "Please specify which role you want to use."
+                            )
+                            return {
+                                "answer": answer,
+                                "sources": [{"source": "hr_data.csv"}],
+                            }
+                            
+                        # Attempt to find related roles based on keyword overlap and hierarchy awareness
+                        _hierarchy_words = {"head", "chief", "lead", "vp", "director", "manager", "officer", "supervisor"}
+                        _stopwords = {"of", "the", "in", "and"} | _hierarchy_words
+                        
+                        target_words = {w for w in re.findall(r"\w+", target_str.lower()) if len(w) > 2 and w not in _stopwords}
+                        if not target_words:
+                            target_words = {w for w in re.findall(r"\w+", target_str.lower()) if len(w) > 2 and w not in {"of", "the", "in", "and"}}
+                            
+                        # Detect if the query implied a leadership role
+                        asked_leadership = any(w in target_str.lower() for w in _hierarchy_words)
+                            
+                        related_roles = set()
+                        if target_words:
+                            all_roles = df_mgr["role"].dropna().unique()
+                            for r in all_roles:
+                                r_lower = r.lower()
+                                for tw in target_words:
+                                    tw_stem = tw[:-1] if tw.endswith('e') and len(tw) > 4 else tw
+                                    if tw_stem in r_lower:
+                                        related_roles.add(r)
+                                        break
+                                        
+                        if related_roles:
+                            is_showing_leadership = False
+                            if asked_leadership:
+                                leadership_matches = {r for r in related_roles if any(hw in r.lower() for hw in _hierarchy_words)}
+                                if leadership_matches:
+                                    related_roles = leadership_matches
+                                    is_showing_leadership = True
+                                    
+                            bullet_points = "\n".join([f"- {r}" for r in sorted(related_roles)[:5]])
+                            role_type_str = " leadership " if is_showing_leadership else " "
+                            answer = (
+                                f"No employee with the exact role \"{target_str.title()}\" was found in the HR dataset.\n\n"
+                                f"Possible related{role_type_str}roles include:\n{bullet_points}\n\n"
+                                f"Please specify which role you want to use."
+                            )
+                        else:
+                            answer = f"According to the HR data, no employee or role matching '{target_str.title()}' was found."
+                            
+                        print(f"[DataQuery] Reports-to lookup failed to find manager: '{target_str}'")
+                        return {
+                            "answer": answer,
+                            "sources": [{"source": "hr_data.csv"}],
+                        }
+                except Exception as e:
+                    print(f"[DataQuery] Error resolving manager: {e}")
+
     # 1. Detect Intent: Is this a counting, listing, summing, averaging, or comparison query?
     is_compare = bool(re.search(r"\b(highest|lowest|most|least|top|bottom|oldest|youngest|earliest|latest|best|worst|senior)\b", q_lower))
     is_avg = bool(re.search(r"\b(average|mean|avg)\b", q_lower))

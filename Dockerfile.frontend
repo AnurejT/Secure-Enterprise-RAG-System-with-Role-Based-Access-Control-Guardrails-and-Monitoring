@@ -1,0 +1,12 @@
+FROM node:18-slim
+
+WORKDIR /app/frontend_react
+
+COPY frontend_react/package*.json ./
+RUN npm install
+
+COPY frontend_react/ ./
+
+EXPOSE 3000
+
+CMD ["npm", "start"]

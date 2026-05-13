@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import axios from "axios";
 
-const API = "http://localhost:5000/api";
+const API = "http://127.0.0.1:5000/api";
 
 // ─── Static data ──────────────────────────────────────────────────
 const STATS = [
@@ -291,6 +291,7 @@ function FileManagerPanel({ token }) {
   const [selectedRole, setSelectedRole]   = useState("general");
   const [fileToUpload, setFileToUpload]   = useState(null);
   const [searchQuery, setSearchQuery]     = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const fileInputRef = useRef(null);
 
@@ -343,19 +344,57 @@ function FileManagerPanel({ token }) {
     const file = fileToUpload;
     setFileToUpload(null);
     setUploading(true);
-    setUploadMsg({ type: "info", text: `Uploading & indexing "${file.name}"…` });
+    setUploadProgress(0);
+    setUploadMsg({ type: "info", text: `Uploading "${file.name}"…` });
+    
     const formData = new FormData();
     formData.append("file", file);
     formData.append("role", selectedRole);
+    
     try {
-      await axios.post(`${API}/upload`, formData, {
+      const res = await axios.post(`${API}/upload`, formData, {
         headers: { "Authorization": `Bearer ${token}` }
       });
-      setUploadMsg({ type: "success", text: `✅ "${file.name}" uploaded & indexed successfully!` });
-      fetchFiles();
+      
+      const taskId = res.data.task_id;
+      if (!taskId) {
+        setUploadMsg({ type: "success", text: `✅ "${file.name}" uploaded successfully!` });
+        fetchFiles();
+        setUploading(false);
+        return;
+      }
+
+      // ── Start Polling ──
+      const poll = async () => {
+        try {
+          const sRes = await axios.get(`${API}/tasks/${taskId}`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
+          const { status, progress, message, error } = sRes.data;
+          
+          if (status === "SUCCESS" || status === "COMPLETED") {
+            setUploadProgress(100);
+            setUploadMsg({ type: "success", text: `✅ "${file.name}" indexed successfully!` });
+            fetchFiles();
+            setUploading(false);
+          } else if (status === "FAILURE" || status === "FAILED") {
+            setUploadMsg({ type: "error", text: `❌ Indexing failed: ${error || "Unknown error"}` });
+            setUploading(false);
+          } else {
+            // PROGRESS or PENDING
+            setUploadProgress(progress || 0);
+            setUploadMsg({ type: "info", text: `⚙️ ${message || "Processing..."}` });
+            setTimeout(poll, 1500); // poll every 1.5s
+          }
+        } catch (pollErr) {
+          console.error("Polling error:", pollErr);
+          setTimeout(poll, 3000);
+        }
+      };
+      poll();
+
     } catch (err) {
       setUploadMsg({ type: "error", text: `❌ Upload failed: ${err.response?.data?.error || err.message}` });
-    } finally {
       setUploading(false);
     }
   };
@@ -444,12 +483,24 @@ function FileManagerPanel({ token }) {
             <input ref={fileInputRef} type="file" accept=".pdf,.docx,.csv,.xlsx,.md" className="hidden"
               onChange={(e) => handleUpload(e.target.files[0])} disabled={uploading} />
             {uploading ? (
-              <div className="flex flex-col items-center gap-3">
-                <svg className="animate-spin h-8 w-8 text-blue-500" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                </svg>
-                <span className="text-blue-600 font-bold text-xs uppercase tracking-widest">Indexing...</span>
+              <div className="flex flex-col items-center gap-3 w-full px-4">
+                <div className="relative w-16 h-16">
+                   <svg className="animate-spin h-16 w-16 text-blue-500 opacity-20" viewBox="0 0 24 24" fill="none">
+                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                   </svg>
+                   <div className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-blue-600">
+                     {uploadProgress}%
+                   </div>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
+                  <div 
+                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-500" 
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                <span className="text-blue-600 font-bold text-[10px] uppercase tracking-widest text-center">
+                  {uploadProgress < 100 ? "Processing..." : "Finalizing..."}
+                </span>
               </div>
             ) : (
               <>

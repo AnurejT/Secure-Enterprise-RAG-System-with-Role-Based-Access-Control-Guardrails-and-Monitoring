@@ -22,14 +22,21 @@ def _extract_employee_id(text: str) -> str | None:
     return match.group(0).upper() if match else None
 
 
-def ingest_document(file_path: str, role: str) -> bool:
+def ingest_document(file_path: str, role: str, task=None) -> bool:
     """
     Parse, chunk, embed, and store a document in the vector repository.
     Returns True on success, raises on failure.
     """
+    def update_progress(pct, msg):
+        if task:
+            task.update_state(state='PROGRESS', meta={'progress': pct, 'message': msg})
+        print(f"[Ingestor] {pct}% - {msg}")
+
     ext = os.path.splitext(file_path)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise ValueError(f"Unsupported file type: {ext}")
+
+    update_progress(20, f"Parsing {os.path.basename(file_path)}...")
 
     role = role.lower()
     base_metadata = {
@@ -69,6 +76,8 @@ def ingest_document(file_path: str, role: str) -> bool:
         loader = PyPDFLoader(file_path) if ext == ".pdf" else Docx2txtLoader(file_path)
         raw_docs = loader.load()
 
+        update_progress(40, f"Chunking {len(raw_docs)} pages...")
+
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         for i, doc in enumerate(splitter.split_documents(raw_docs)):
             meta = {**base_metadata, "chunk_id": i}
@@ -84,6 +93,9 @@ def ingest_document(file_path: str, role: str) -> bool:
         if "role_allowed" not in doc.metadata:
             doc.metadata["role_allowed"] = [role]
 
+    update_progress(60, f"Generating embeddings for {len(documents)} chunks...")
+    
     vector_repo.add_documents(documents, get_embeddings())
-    print(f"[Ingestor] Stored {len(documents)} chunks for: {os.path.basename(file_path)}")
+    
+    update_progress(100, f"Stored {len(documents)} chunks for: {os.path.basename(file_path)}")
     return True

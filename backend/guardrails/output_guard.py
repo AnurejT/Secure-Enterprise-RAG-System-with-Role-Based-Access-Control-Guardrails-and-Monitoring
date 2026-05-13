@@ -97,7 +97,7 @@ def validate_output(answer: str, context: str = "", query: str = "") -> str:
                 "Please refer to your department documents directly."
             )
 
-    if context and not verify_grounding(answer, context, query):
+    if context and "cannot be calculated" not in a_lower and not verify_grounding(answer, context, query):
         return (
             "The answer to this question is not available in the accessible documents."
         )

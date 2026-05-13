@@ -4,12 +4,12 @@ python-dotenv
 langchain
 langchain-core
 langchain-community
-langchain-chroma
+langchain-qdrant
 langchain-groq
 langchain-huggingface
 langchain-text-splitters
 pypdf
-chromadb
+qdrant-client
 sentence-transformers
 flask
 flask-cors
@@ -21,3 +21,7 @@ ragas
 langsmith
 openai
 datasets
+celery
+redis
+psycopg2-binary
+Flask-Migrate

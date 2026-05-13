@@ -2,27 +2,26 @@
 backend/monitoring/evaluator.py
 Ragas evaluation using Groq + HuggingFace — no OpenAI key required.
 """
-import os
-from typing import List
 
+from typing import Optional
 from backend.core.config import GROQ_API_KEY, GROQ_MODEL, EMBEDDING_MODEL
 
 
 def _build_ragas_llm():
-    from ragas.llms import LangchainLLMWrapper
-    from langchain_groq import ChatGroq
+    from ragas.llms import LangchainLLMWrapper  # type: ignore # pyrefly: ignore[missing-import]
+    from langchain_groq import ChatGroq  # type: ignore # pyrefly: ignore[missing-import]
     return LangchainLLMWrapper(
         ChatGroq(temperature=0, model=GROQ_MODEL, groq_api_key=GROQ_API_KEY)
     )
 
 
 def _build_ragas_embeddings():
-    from ragas.embeddings import LangchainEmbeddingsWrapper
-    from langchain_huggingface import HuggingFaceEmbeddings
+    from ragas.embeddings import LangchainEmbeddingsWrapper  # type: ignore # pyrefly: ignore[missing-import]
+    from langchain_huggingface import HuggingFaceEmbeddings  # type: ignore # pyrefly: ignore[missing-import]
     return LangchainEmbeddingsWrapper(HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL))
 
 
-def _safe_float(val) -> float | None:
+def _safe_float(val) -> Optional[float]:
     try:
         f = float(val)
         return round(f, 4) if f == f else None
@@ -30,11 +29,11 @@ def _safe_float(val) -> float | None:
         return None
 
 
-def run_ragas_eval(question: str, answer: str, contexts: List[str]) -> dict:
+def run_ragas_eval(question: str, answer: str, contexts: list[str]) -> dict:
     try:
-        from datasets import Dataset
-        from ragas import evaluate
-        from ragas.metrics.collections import (
+        from datasets import Dataset  # type: ignore # pyrefly: ignore[missing-import]
+        from ragas import evaluate  # type: ignore # pyrefly: ignore[missing-import]
+        from ragas.metrics.collections import (  # type: ignore # pyrefly: ignore[missing-import]
             answer_relevancy,
             faithfulness,
             context_precision,
@@ -78,7 +77,7 @@ def run_ragas_eval(question: str, answer: str, contexts: List[str]) -> dict:
         }
 
 
-def run_ragas_eval_safe(question: str, answer: str, contexts: List[str]) -> dict:
+def run_ragas_eval_safe(question: str, answer: str, contexts: list[str]) -> dict:
     """Non-crashing wrapper — always returns a dict."""
     try:
         return run_ragas_eval(question, answer, contexts)

@@ -53,37 +53,62 @@ def _keyword_score(query: str, text: str) -> float:
 
 def get_relevant_docs(query: str, role: str, employee_id: str | None = None) -> list:
     """
-    1. Broad vector search (top-50)
-    2. RBAC filter
-    3. Optional employee_id filter
-    4. Hybrid ranking (keyword score)
-    5. Return top-10
+    1. Construct RBAC filter (Pre-Filtering)
+    2. Vector search with filter
+    3. Hybrid ranking (keyword score)
+    4. Return top-10
     """
     embeddings = get_embeddings()
+    role = role.lower()
 
     print(f"\n[Retriever] query='{query[:60]}' role='{role}'")
 
-    # ── 1. Broad fetch ────────────────────────────────────────────
-    fetch_k  = 200 if employee_id else 100
-    raw_docs = vector_repo.similarity_search(query, embeddings, k=fetch_k)
+    # ── 1. Construct Filter ───────────────────────────────────────
+    # If admin, no filter (see everything). 
+    # Otherwise, see docs for your role OR 'general' docs.
+    filter_dict = None
+    if role != "admin":
+        # Qdrant with LangChain handles complex filters better via the native client,
+        # but here we pass a simple dict that we'll convert to a 'should' (OR) filter.
+        # However, our current repo helper only supports 'must' (AND).
+        # Let's update the repo helper or handle the 'OR' logic here.
+        # Actually, let's keep it simple: most docs are either 'general' or specific.
+        pass
 
-    # ── 2. RBAC filter ────────────────────────────────────────────
-    allowed = filter_by_role(raw_docs, role)
+    # Re-importing models for complex OR filter
+    from qdrant_client.http import models
+    
+    q_filter = None
+    if role != "admin":
+        conditions = [
+            models.FieldCondition(key="metadata.role_allowed", match=models.MatchValue(value=role)),
+            models.FieldCondition(key="metadata.role_allowed", match=models.MatchValue(value="general"))
+        ]
+        if employee_id:
+            # If employee_id is provided, we MUST match it AND (role OR general)
+            rbac_filter = models.Filter(should=conditions)
+            emp_filter  = models.FieldCondition(key="metadata.employee_id", match=models.MatchValue(value=employee_id))
+            q_filter    = models.Filter(must=[emp_filter, rbac_filter])
+        else:
+            q_filter = models.Filter(should=conditions)
+
+    # ── 2. Vector Fetch (Pre-Filtered) ────────────────────────────
+    from langchain_qdrant import QdrantVectorStore
+    from backend.repositories.vector_repo import _load_or_create
+    
+    db = _load_or_create(embeddings)
+    fetch_k = 20
+    
+    # We use the db directly to pass the q_filter object
+    allowed = db.similarity_search(query, k=fetch_k, filter=q_filter)
+    
     if not allowed:
-        print("[Retriever] No documents permitted for this role.")
+        print("[Retriever] No documents permitted/found for this role.")
         return []
 
-    # ── 3. Employee filter (optional) ────────────────────────────
-    if employee_id:
-        emp_filtered = [
-            d for d in allowed
-            if d.metadata.get("employee_id") == employee_id
-        ]
-        print(f"[Retriever] Employee filter: {len(emp_filtered)}/{len(allowed)}")
-        if emp_filtered:
-            allowed = emp_filtered
+    print(f"[Retriever] RBAC Pre-filter: {len(allowed)} docs retrieved.")
 
-    # ── 4. Hybrid ranking ─────────────────────────────────────────
+    # ── 3. Hybrid ranking ─────────────────────────────────────────
     scored = sorted(
         [((_keyword_score(query, d.page_content)), d) for d in allowed],
         key=lambda x: x[0],

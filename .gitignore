@@ -11,29 +11,51 @@ dist/
 build/
 *.so
 
-# Virtual Environment — NEVER commit this
+# Virtual Environment
 venv/
 .venv/
 env/
 ENV/
+bin/
+include/
+lib/
+share/
+pyvenv.cfg
 
-# Environment variables — keep secrets out of Git
+# Environment variables
 .env
+.env.test
 
-# Vector DB — large binary files, regenerate with ingest.py
-vector_db/
-database/
+# Storage & Vector DB (Large binary data)
+storage/db/
+storage/vector/
+storage/documents/processed/
+data/
 db/
+vector_db/
+
+# Node.js (Frontend)
+frontend_react/node_modules/
+frontend_react/build/
+frontend_react/.env
+frontend_react/npm-debug.log*
+frontend_react/yarn-debug.log*
+frontend_react/yarn-error.log*
 
 # IDE / OS files
 .vscode/
 .idea/
-*.DS_Store
+*.swp
+*.swo
+.DS_Store
 Thumbs.db
+.gemini/
 
 # Logs
 *.log
 logs/
+.history/
 
 # Model caches
 .cache/
+huggingface/

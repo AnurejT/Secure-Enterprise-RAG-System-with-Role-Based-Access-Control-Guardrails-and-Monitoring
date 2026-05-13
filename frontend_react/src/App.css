@@ -335,6 +335,8 @@ body {
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  position: relative;
+  z-index: 50; /* Ensure it stays above messages and background shifts */
 }
 .input-field {
   flex: 1;
@@ -349,8 +351,11 @@ body {
   outline: none;
   transition: border-color 0.18s;
   line-height: 1.5;
+  min-height: 46px; /* Match button height */
   max-height: 120px;
   overflow-y: auto;
+  cursor: text;
+  pointer-events: auto;
 }
 .input-field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
 .input-field::placeholder { color: var(--text-muted); }
@@ -434,6 +439,7 @@ body {
              toastFadeOut 0.4s ease 3.1s forwards;
   white-space: nowrap;
   backdrop-filter: blur(16px);
+  pointer-events: none; /* Ensure it doesn't block clicks */
 }
 .role-toast-dot {
   width: 9px;

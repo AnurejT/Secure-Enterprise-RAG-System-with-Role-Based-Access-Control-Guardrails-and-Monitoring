@@ -18,3 +18,6 @@ def get_logger(name: str = "enterprise_rag") -> logging.Logger:
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
     return logger
+
+# Default instance
+logger = get_logger()

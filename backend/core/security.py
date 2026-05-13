@@ -12,20 +12,34 @@ from flask import request, jsonify
 from backend.core import config
 
 
-def generate_token(email: str, role: str) -> str:
-    """Encode a signed JWT for the given user."""
+def generate_access_token(email: str, role: str) -> str:
+    """Encode a short-lived access JWT."""
     payload = {
         "email": email,
         "role": role,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=config.JWT_EXPIRY_HOURS),
+        "type": "access",
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=config.JWT_ACCESS_EXPIRY_MINUTES),
     }
     return jwt.encode(payload, config.SECRET_KEY, algorithm=config.JWT_ALGORITHM)
 
 
-def verify_token(token: str) -> dict | None:
-    """Decode a JWT. Returns payload dict or None on any error."""
+def generate_refresh_token(email: str) -> str:
+    """Encode a long-lived refresh JWT."""
+    payload = {
+        "email": email,
+        "type": "refresh",
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=config.JWT_REFRESH_EXPIRY_DAYS),
+    }
+    return jwt.encode(payload, config.SECRET_KEY, algorithm=config.JWT_ALGORITHM)
+
+
+def verify_token(token: str, expected_type: str = "access") -> dict | None:
+    """Decode and verify a JWT. Checks type to prevent token swapping."""
     try:
-        return jwt.decode(token, config.SECRET_KEY, algorithms=[config.JWT_ALGORITHM])
+        data = jwt.decode(token, config.SECRET_KEY, algorithms=[config.JWT_ALGORITHM])
+        if data.get("type") != expected_type:
+            return None
+        return data
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
 

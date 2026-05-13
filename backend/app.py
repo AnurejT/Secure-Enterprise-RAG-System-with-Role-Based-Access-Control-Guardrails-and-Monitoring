@@ -14,7 +14,7 @@ if sys.stderr.encoding != "utf-8":
 
 import os
 # pyrefly: ignore [missing-import]
-from flask import Flask
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 from backend.core import config
@@ -47,8 +47,10 @@ def create_app() -> Flask:
     }})
 
     # ── Extensions ─────────────────────────────────────────────────
+    from backend.core.extensions import db, bcrypt, migrate
     db.init_app(app)
     bcrypt.init_app(app)
+    migrate.init_app(app, db)
 
     # ── Blueprints ─────────────────────────────────────────────────
     app.register_blueprint(api_routes,    url_prefix="/api")
@@ -57,7 +59,41 @@ def create_app() -> Flask:
 
     # ── Database ───────────────────────────────────────────────────
     with app.app_context():
-        db.create_all()
+        if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
+            print("[Database] SQLite detected. Initializing tables and seeding admin...")
+            db.create_all()
+            from backend.models.user import User
+            if not User.query.filter_by(email="admin@company.com").first():
+                admin = User(
+                    name="System Admin",
+                    email="admin@company.com",
+                    password_hash=bcrypt.generate_password_hash("Admin@123").decode("utf-8"),
+                    role="admin"
+                )
+                db.session.add(admin)
+                db.session.commit()
+                print("[Database] Admin user seeded.")
+
+    @app.before_request
+    def log_request_info():
+        print(f"[Request] {request.method} {request.path}")
+
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        import traceback
+        error_msg = str(e)
+        print(f"[Error] Global error handler: {error_msg}")
+        traceback.print_exc()
+        
+        # Help diagnose DB issues
+        if "psycopg2" in error_msg or "SQLALCHEMY_DATABASE_URI" in error_msg or "connection" in error_msg.lower():
+            return jsonify({
+                "error": "Database Connection Error", 
+                "details": "The backend cannot connect to PostgreSQL. Ensure your database is running and DATABASE_URL is set correctly.",
+                "original_error": error_msg
+            }), 500
+            
+        return jsonify({"error": "Internal Server Error", "details": error_msg}), 500
 
     return app
 
@@ -68,4 +104,4 @@ configure_langsmith()
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)

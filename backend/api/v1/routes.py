@@ -16,7 +16,9 @@ from backend.models.message import Message
 from backend.models.user import User
 from backend.rag.ingestion.document_ingestor import ingest_document
 from backend.services.rag_pipeline import process_query, process_query_stream
-from backend.workers.evaluation_worker import run_eval_async
+from backend.tasks.ingestion_tasks import ingest_document_task
+from backend.tasks.eval_tasks import run_ragas_eval_task
+from celery.result import AsyncResult
 
 api_routes = Blueprint("api_routes", __name__)
 
@@ -70,8 +72,22 @@ def upload_file():
         except Exception as ve:
             print(f"[Upload] Vector store cleanup warning: {ve}")
 
-        ingest_document(filepath, role)
-        return jsonify({"message": "File uploaded & indexed successfully"})
+        # ingest_document(filepath, role) -- REPLACED BY CELERY
+        try:
+            task = ingest_document_task.delay(filepath, role)
+            return jsonify({
+                "message": "File upload accepted. Processing in background.",
+                "task_id": task.id
+            })
+        except Exception as celery_err:
+            print(f"[Upload] Celery/Redis error, falling back to sync: {celery_err}")
+            # Fallback to synchronous ingestion
+            try:
+                ingest_document(filepath, role)
+                return jsonify({"message": "File uploaded & indexed successfully (Synchronous fallback)"})
+            except Exception as ingest_err:
+                return jsonify({"error": f"Ingestion failed: {str(ingest_err)}"}), 500
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -120,12 +136,24 @@ def query():
         db.session.add(bot_msg)
         db.session.commit()
 
-        # Async Ragas eval (non-blocking)
-        run_eval_async(
-            query=user_query, answer=result["answer"],
-            contexts=[], role=role,
-            token_usage=result.get("usage"), latency_ms=result.get("latency_ms"),
-        )
+        # Async Ragas eval (non-blocking via Celery)
+        try:
+            run_ragas_eval_task.delay(
+                query=user_query, answer=result["answer"],
+                contexts=[], role=role,
+                token_usage=result.get("usage"), latency_ms=result.get("latency_ms"),
+            )
+        except Exception as celery_err:
+            print(f"[Query] Celery/Redis error for eval, falling back to sync: {celery_err}")
+            try:
+                from backend.monitoring.service import evaluate_and_record
+                evaluate_and_record(
+                    query=user_query, answer=result["answer"],
+                    contexts=[], role=role,
+                    token_usage=result.get("usage"), latency_ms=result.get("latency_ms"),
+                )
+            except Exception as eval_err:
+                print(f"[Query] Sync eval fallback failed: {eval_err}")
 
         return jsonify(result)
     except Exception as e:
@@ -187,12 +215,21 @@ def query_stream():
                 db.session.add(bot_msg)
                 db.session.commit()
 
-                # Async Ragas eval
+                # Async Ragas eval (non-blocking via Celery)
                 try:
                     contexts = [e.get("source", "") for e in json.loads(sources_json)]
                 except Exception:
                     contexts = []
-                run_eval_async(query=user_query, answer=full_answer, contexts=contexts, role=role)
+                
+                try:
+                    run_ragas_eval_task.delay(query=user_query, answer=full_answer, contexts=contexts, role=role)
+                except Exception as celery_err:
+                    print(f"[Stream] Celery/Redis error for eval, falling back to sync: {celery_err}")
+                    try:
+                        from backend.monitoring.service import evaluate_and_record
+                        evaluate_and_record(query=user_query, answer=full_answer, contexts=contexts, role=role)
+                    except Exception as eval_err:
+                        print(f"[Stream] Sync eval fallback failed: {eval_err}")
             except Exception as e:
                 import traceback
                 traceback.print_exc()
@@ -248,6 +285,7 @@ def list_files():
 @api_routes.route("/files/<filename>", methods=["DELETE", "OPTIONS"])
 @token_required
 def delete_file(filename):
+    print(f"[Delete] Request received for: {filename}")
     if ".." in filename or "/" in filename or "\\" in filename:
         return jsonify({"error": "Invalid filename"}), 400
 
@@ -272,3 +310,32 @@ def delete_file(filename):
         return jsonify({"message": f'"{filename}" deleted successfully'})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── Task Status ───────────────────────────────────────────────────────
+
+@api_routes.route("/tasks/<task_id>", methods=["GET"])
+@token_required
+def get_task_status(task_id):
+    """
+    Check status of a background Celery task.
+    """
+    task_result = AsyncResult(task_id)
+    
+    response = {
+        "task_id": task_id,
+        "status":  task_result.status,
+        "progress": 0,
+        "message": ""
+    }
+    
+    if task_result.status == "PROGRESS":
+        response["progress"] = task_result.info.get("progress", 0)
+        response["message"]  = task_result.info.get("message", "")
+    elif task_result.status == "SUCCESS":
+        response["progress"] = 100
+        response["result"]   = task_result.result
+    elif task_result.status == "FAILURE":
+        response["error"]    = str(task_result.info)
+        
+    return jsonify(response)

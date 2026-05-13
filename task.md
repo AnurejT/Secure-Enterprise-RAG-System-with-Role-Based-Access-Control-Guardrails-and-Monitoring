@@ -1,0 +1,22 @@
+- `[x]` Phase 1: Setup Redis & Celery Core
+    - `[x]` Update `requirements.txt`
+    - `[x]` Update `backend/core/config.py`
+    - `[x]` Create `backend/celery_app.py`
+    - `[x]` Create `backend/celery_worker.py`
+- `[x]` Phase 2: Document Ingestion Tasks
+    - `[x]` Create `backend/tasks/ingestion_tasks.py`
+    - `[x]` Refactor `backend/rag/ingestion/document_ingestor.py` for task support
+    - `[x]` Update `backend/api/v1/routes.py` (Upload)
+- `[x]` Phase 3: Ragas Evaluation Tasks
+    - `[x]` Create `backend/tasks/eval_tasks.py`
+    - `[x]` Update `backend/api/v1/routes.py` (Query/Monitoring)
+    - `[x]` Delete old thread-based workers
+- `[x]` Phase 4: Task Status API
+    - `[x]` Add `/api/tasks/<task_id>` endpoint
+- `[x]` Phase 5: Enterprise Safety & Docker
+    - `[x]` Add retry/timeout logic to tasks
+    - `[x]` Create `docker-compose.yml`
+- `[x]` Phase 6: Frontend Integration
+    - `[x]` Update `AdminDashboard.js` with polling and progress UI
+- `[x]` Phase 7: Verification
+    - `[x]` Verify async ingestion and evaluation
