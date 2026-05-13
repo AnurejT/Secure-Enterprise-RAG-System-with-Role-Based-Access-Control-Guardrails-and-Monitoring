@@ -16,6 +16,8 @@ flask-cors
 flask-sqlalchemy
 flask-bcrypt
 pyjwt
+pandas
+openpyxl
 # Phase 7: Monitoring & Evaluation
 ragas
 langsmith
