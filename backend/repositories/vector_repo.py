@@ -19,6 +19,7 @@ def _get_qdrant_client():
     if _QDRANT_CLIENT is not None:
         return _QDRANT_CLIENT
     
+    # pyrefly: ignore [missing-import]
     from qdrant_client import QdrantClient
     os.makedirs(os.path.dirname(VECTOR_DIR), exist_ok=True)
     _QDRANT_CLIENT = QdrantClient(path=VECTOR_DIR)
@@ -27,8 +28,8 @@ def _get_qdrant_client():
 
 def _load_or_create(embeddings):
     """Load existing Qdrant collection from disk, or create a fresh empty one."""
-    from langchain_qdrant import QdrantVectorStore
-    from qdrant_client.http.models import Distance, VectorParams
+    from langchain_qdrant import QdrantVectorStore  # pyrefly: ignore [missing-import]
+    from qdrant_client.http.models import Distance, VectorParams  # pyrefly: ignore [missing-import]
 
     global _VECTOR_DB
 
@@ -76,6 +77,7 @@ def similarity_search(query: str, embeddings, k: int = 20, filter_dict: dict | N
     if not filter_dict:
         return db.similarity_search(query, k=k)
 
+    # pyrefly: ignore [missing-import]
     from qdrant_client.http import models
     
     must_filters = []
@@ -104,6 +106,7 @@ def similarity_search(query: str, embeddings, k: int = 20, filter_dict: dict | N
 
 def delete_by_source(file_path: str, embeddings) -> None:
     """Delete all chunks belonging to a source file."""
+    # pyrefly: ignore [missing-import]
     from qdrant_client.http import models
     
     # Ensure _VECTOR_DB is loaded first so we use the same client

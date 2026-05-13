@@ -7,8 +7,10 @@ import os
 import re
 
 import pandas as pd
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document  # type: ignore
+# pyrefly: ignore [missing-import]
+from langchain_text_splitters import RecursiveCharacterTextSplitter 
+
 
 from backend.core.config import DOCUMENTS_DIR
 from backend.rag.embeddings.encoder import get_embeddings
@@ -72,6 +74,7 @@ def ingest_document(file_path: str, role: str, task=None) -> bool:
 
     # ── PDF / DOCX ─────────────────────────────────────────────────
     else:
+        # pyrefly: ignore [missing-import]
         from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
         loader = PyPDFLoader(file_path) if ext == ".pdf" else Docx2txtLoader(file_path)
         raw_docs = loader.load()

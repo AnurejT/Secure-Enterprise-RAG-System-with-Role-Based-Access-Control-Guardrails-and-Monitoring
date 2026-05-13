@@ -76,6 +76,7 @@ def get_relevant_docs(query: str, role: str, employee_id: str | None = None) -> 
         pass
 
     # Re-importing models for complex OR filter
+    # pyrefly: ignore [missing-import]
     from qdrant_client.http import models
     
     q_filter = None
@@ -93,6 +94,7 @@ def get_relevant_docs(query: str, role: str, employee_id: str | None = None) -> 
             q_filter = models.Filter(should=conditions)
 
     # ── 2. Vector Fetch (Pre-Filtered) ────────────────────────────
+    # pyrefly: ignore [missing-import]
     from langchain_qdrant import QdrantVectorStore
     from backend.repositories.vector_repo import _load_or_create
     
