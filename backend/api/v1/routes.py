@@ -558,7 +558,7 @@ def get_admin_activity():
             # Sort by mtime descending
             files.sort(key=lambda x: x[1], reverse=True)
             for f, mtime in files[:5]:
-                dt = datetime.fromtimestamp(mtime).isoformat() + "Z"
+                dt = datetime.utcfromtimestamp(mtime).isoformat() + "Z"
                 activity.append({
                     "time": dt,
                     "icon": "📄",

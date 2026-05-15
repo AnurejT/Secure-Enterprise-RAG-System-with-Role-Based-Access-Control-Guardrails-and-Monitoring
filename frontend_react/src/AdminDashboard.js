@@ -4,12 +4,11 @@ import axios from "axios";
 const API = "http://127.0.0.1:5000/api";
 
 const NAV_ITEMS = [
-  { id: "dashboard", label: "Dashboard",       icon: "🏠" },
-  { id: "approvals", label: "Approvals",       icon: "✅" },
-  { id: "chat",      label: "Query Assistant", icon: "💬" },
-  { id: "files",     label: "Manage Files",    icon: "🗂️" },
-  { id: "monitoring",label: "Monitoring",      icon: "📊" },
-  { id: "settings",  label: "Settings",        icon: "⚙️",  soon: true },
+  { id: "chat",       label: "Search Interface",    icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg> },
+  { id: "files",      label: "Document Management", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg> },
+  { id: "approvals",  label: "Access Control",      icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> },
+  { id: "guardrails", label: "Security Guardrails", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>, soon: true },
+  { id: "dashboard",  label: "Monitoring",          icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg> },
 ];
 
 function formatRelativeTime(isoString) {
@@ -30,7 +29,7 @@ function ApprovalsPanel({ user }) {
   const [loading, setLoading] = useState(true);
   const [actioning, setActioning] = useState(null);
 
-  const fetchPending = async () => {
+  const fetchPending = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/admin/pending`, {
         headers: { "Authorization": `Bearer ${user.token}` }
@@ -41,9 +40,9 @@ function ApprovalsPanel({ user }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user.token]);
 
-  useEffect(() => { fetchPending(); }, []);
+  useEffect(() => { fetchPending(); }, [fetchPending]);
 
   const handleApprove = async (filename) => {
     setActioning(filename);
@@ -74,66 +73,81 @@ function ApprovalsPanel({ user }) {
     }
   };
 
-  if (loading) return <div className="p-10 text-center text-gray-400">Loading pending requests...</div>;
+  if (loading) return <div className="p-10 text-center text-[13px] font-bold text-gray-400 tracking-wide uppercase">Loading pending requests...</div>;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 max-w-[1200px] mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Pending Approvals</h2>
-          <p className="text-sm text-gray-500">Review documents uploaded by department users before they are indexed.</p>
+          <h2 className="text-[28px] font-bold text-[#0a0a0a] tracking-tight leading-none mb-2">Pending Approvals</h2>
+          <p className="text-[13px] text-gray-500 font-medium">Review documents uploaded by department users before they are indexed.</p>
         </div>
-        <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full text-sm font-bold shadow-sm">
+        <div className="bg-[#e8effd] text-[#2c52a0] border border-[#d1ddf7]/50 px-3 py-1.5 rounded-full text-[11px] font-bold shadow-sm tracking-wide">
           {pending.length} Waiting
         </div>
       </div>
 
       {pending.length === 0 ? (
-        <div className="bg-white rounded-3xl border border-gray-100 p-16 text-center shadow-sm">
-          <div className="text-5xl mb-4">🎉</div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">No Pending Requests</h3>
-          <p className="text-gray-500">All department uploads have been processed.</p>
+        <div className="bg-white rounded-[4px] border border-gray-200 p-16 text-center shadow-sm">
+          <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 mx-auto mb-4 border border-gray-200">
+             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" /></svg>
+          </div>
+          <h3 className="text-[16px] font-bold text-[#0a0a0a] mb-1">No Pending Requests</h3>
+          <p className="text-[13px] text-gray-500 font-medium">All department uploads have been processed.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4">
-          {pending.map((file) => (
-            <div key={file.name} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between">
-              <div className="flex items-center gap-5">
-                <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-2xl">
-                  {file.name.endsWith('.pdf') ? '📕' : file.name.endsWith('.docx') ? '📘' : '📄'}
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-800 flex items-center gap-2">
-                    {file.name}
-                    <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full uppercase tracking-wider">{file.size_kb} KB</span>
-                  </h4>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="text-xs text-indigo-600 font-bold uppercase tracking-widest">{file.role}</span>
-                    <span className="text-xs text-gray-400">•</span>
-                    <span className="text-xs text-gray-500">Uploaded by <b>{file.uploaded_by}</b></span>
-                    <span className="text-xs text-gray-400">•</span>
-                    <span className="text-xs text-gray-500">{formatRelativeTime(file.uploaded_at)}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => handleReject(file.name)}
-                  disabled={!!actioning}
-                  className="px-4 py-2 text-sm font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50"
-                >
-                  Reject
-                </button>
-                <button 
-                  onClick={() => handleApprove(file.name)}
-                  disabled={!!actioning}
-                  className="px-6 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all disabled:opacity-50"
-                >
-                  {actioning === file.name ? "Processing..." : "Approve & Index"}
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="bg-white rounded-[4px] border border-gray-200 shadow-sm overflow-hidden">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-gray-200 bg-[#fafafa]">
+                <th className="px-5 py-3 text-[10px] font-bold text-gray-500 tracking-widest uppercase">Document</th>
+                <th className="px-5 py-3 text-[10px] font-bold text-gray-500 tracking-widest uppercase">Context</th>
+                <th className="px-5 py-3 text-[10px] font-bold text-gray-500 tracking-widest uppercase text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {pending.map((file) => (
+                <tr key={file.name} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-[#f4f5f5] rounded-[4px] flex items-center justify-center text-gray-500 border border-gray-200 shrink-0">
+                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      </div>
+                      <div>
+                        <div className="font-bold text-[#0a0a0a] text-[13px] flex items-center gap-2">
+                          {file.name}
+                          <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded uppercase tracking-wider">{file.size_kb} KB</span>
+                        </div>
+                        <div className="text-[11px] text-gray-500 mt-0.5">Uploaded {formatRelativeTime(file.uploaded_at)}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="text-[12px] font-bold text-[#0a0a0a] capitalize">{file.role}</div>
+                    <div className="text-[10px] text-gray-400 font-medium">By: {file.uploaded_by}</div>
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => handleReject(file.name)}
+                        disabled={!!actioning}
+                        className="px-3 py-1.5 text-[11px] font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded-[4px] transition-colors disabled:opacity-50 tracking-wide"
+                      >
+                        REJECT
+                      </button>
+                      <button 
+                        onClick={() => handleApprove(file.name)}
+                        disabled={!!actioning}
+                        className="px-4 py-1.5 bg-[#0a0a0a] text-white rounded-[4px] text-[11px] font-bold hover:bg-gray-800 transition-colors disabled:opacity-50 tracking-wide shadow-sm"
+                      >
+                        {actioning === file.name ? "PROCESSING..." : "APPROVE & INDEX"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -146,14 +160,14 @@ function ScoreBar({ label, value, color }) {
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-sm font-medium text-gray-700">{label}</span>
-        <span className="text-sm font-bold" style={{ color }}>
+        <span className="text-[11px] font-bold text-gray-500 tracking-wide uppercase">{label}</span>
+        <span className="text-[13px] font-bold text-[#0a0a0a]">
           {pct != null ? `${pct}%` : "—"}
         </span>
       </div>
-      <div className="w-full bg-gray-100 rounded-full h-2.5">
+      <div className="w-full bg-gray-100 rounded-full h-[6px] overflow-hidden">
         <div
-          className="h-2.5 rounded-full transition-all duration-500"
+          className="h-full rounded-full transition-all duration-500"
           style={{ width: pct != null ? `${pct}%` : "0%", background: color }}
         />
       </div>
@@ -201,170 +215,122 @@ function MonitoringPanel({ token }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-[1400px] mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Monitoring & Evaluation</h2>
-          <p className="text-sm text-gray-500">Live Ragas metrics, token usage, and query traces</p>
+          <h2 className="text-[28px] font-bold text-[#0a0a0a] tracking-tight leading-none mb-2">Monitoring & Evaluation</h2>
+          <p className="text-[13px] text-gray-500 font-medium">Live Ragas metrics, token usage, and query traces.</p>
         </div>
         <button
           onClick={fetchData}
-          className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-100 font-medium transition-all"
+          className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-[#0a0a0a] text-[11px] font-bold rounded-[4px] hover:bg-gray-50 transition-colors shadow-sm tracking-wide"
         >
-          🔄 Refresh {lastRefresh && <span className="text-gray-400">· {lastRefresh}</span>}
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          SYNC {lastRefresh && <span className="text-gray-400 font-medium ml-1">· {lastRefresh}</span>}
         </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 gap-3 text-gray-400">
-          <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-          </svg>
-          <span className="text-sm">Loading metrics…</span>
+        <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
+          <div className="w-6 h-6 border-2 border-gray-200 border-t-[#0a0a0a] rounded-full animate-spin"></div>
+          <span className="text-[11px] font-bold tracking-widest uppercase">Acquiring Telemetry...</span>
         </div>
       ) : (
         <>
           {/* ── Top stat chips ── */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
             {[
-              { label: "Total Queries",    value: ragas.total_queries ?? 0,                        icon: "🔍", color: "#3b82f6", bg: "#eff6ff" },
-              { label: "Total Tokens",     value: tokens.total_tokens?.toLocaleString() ?? "0",    icon: "⚡", color: "#8b5cf6", bg: "#f5f3ff" },
-              { label: "Est. Cost (USD)",  value: `$${tokens.total_cost_usd?.toFixed(5) ?? "0.00000"}`, icon: "💰", color: "#10b981", bg: "#ecfdf5" },
-              { label: "LLM Calls",        value: tokens.call_count ?? 0,                          icon: "📡", color: "#f59e0b", bg: "#fffbeb" },
+              { label: "TOTAL QUERIES",    value: ragas.total_queries ?? 0 },
+              { label: "TOTAL TOKENS",     value: tokens.total_tokens?.toLocaleString() ?? "0" },
+              { label: "EST. COST (USD)",  value: `$${tokens.total_cost_usd?.toFixed(5) ?? "0.00000"}` },
+              { label: "LLM CALLS",        value: tokens.call_count ?? 0 },
             ].map((s) => (
-              <div key={s.label} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl mb-3" style={{ background: s.bg }}>{s.icon}</div>
-                <div className="text-xl font-extrabold text-gray-900">{s.value}</div>
-                <div className="text-xs font-semibold text-gray-500 mt-0.5">{s.label}</div>
+              <div key={s.label} className="bg-white rounded-[4px] border border-gray-200 shadow-sm p-5 hover:border-gray-300 transition-colors">
+                <div className="text-[10px] font-bold text-gray-500 tracking-widest mb-4">{s.label}</div>
+                <div className="text-[26px] font-bold text-[#0a0a0a] leading-none">{s.value}</div>
               </div>
             ))}
           </div>
 
-          {/* ── Ragas scores ── */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h3 className="font-bold text-gray-900 mb-1">📈 Ragas Quality Scores</h3>
-              <p className="text-xs text-gray-400 mb-5">Averaged across all evaluated queries · Auto-updated after each response</p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* ── Ragas scores ── */}
+            <div className="bg-white rounded-[4px] border border-gray-200 shadow-sm p-6">
+              <h3 className="font-bold text-[#0a0a0a] text-[15px] tracking-tight mb-1">Ragas Quality Scores</h3>
+              <p className="text-[11px] font-medium text-gray-500 mb-6">Averaged across all evaluated queries.</p>
               {ragas.total_queries === 0 ? (
                 <div className="text-center py-8 text-gray-400">
-                  <div className="text-3xl mb-2">🧪</div>
-                  <p className="text-sm">No queries evaluated yet.</p>
-                  <p className="text-xs mt-1">Ask a question in the Query Assistant to generate metrics.</p>
+                  <p className="text-[13px] font-bold text-gray-400 uppercase tracking-wide">No Telemetry</p>
                 </div>
               ) : (
                 <>
-                  <ScoreBar label="Answer Relevancy"  value={ragas.avg_answer_relevancy}  color={scoreColor(ragas.avg_answer_relevancy)} />
-                  <ScoreBar label="Faithfulness"       value={ragas.avg_faithfulness}      color={scoreColor(ragas.avg_faithfulness)} />
-                  <ScoreBar label="Context Relevancy"  value={ragas.avg_context_relevancy} color={scoreColor(ragas.avg_context_relevancy)} />
-                  <p className="text-xs text-gray-400 mt-4">Based on {ragas.total_queries} evaluated queries</p>
+                  <ScoreBar label="Answer Relevancy"  value={ragas.avg_answer_relevancy}  color="#0a0a0a" />
+                  <ScoreBar label="Faithfulness"       value={ragas.avg_faithfulness}      color="#0a0a0a" />
+                  <ScoreBar label="Context Relevancy"  value={ragas.avg_context_relevancy} color="#0a0a0a" />
+                  <p className="text-[10px] font-bold text-gray-400 mt-5 uppercase tracking-widest text-right">Based on {ragas.total_queries} evaluations</p>
                 </>
               )}
             </div>
 
             {/* ── Token breakdown ── */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-              <h3 className="font-bold text-gray-900 mb-1">💰 Token Usage & Cost</h3>
-              <p className="text-xs text-gray-400 mb-5">Groq llama-3.1-8b-instant · Resets on server restart</p>
-              <div className="space-y-3">
+            <div className="bg-white rounded-[4px] border border-gray-200 shadow-sm p-6">
+              <h3 className="font-bold text-[#0a0a0a] text-[15px] tracking-tight mb-1">Token Efficiency Overview</h3>
+              <p className="text-[11px] font-medium text-gray-500 mb-6">Current session aggregates.</p>
+              <div className="space-y-2">
                 {[
-                  { label: "Prompt Tokens",     value: tokens.prompt_tokens?.toLocaleString()     ?? "0", color: "#6366f1" },
-                  { label: "Completion Tokens", value: tokens.completion_tokens?.toLocaleString() ?? "0", color: "#10b981" },
-                  { label: "Total Tokens",      value: tokens.total_tokens?.toLocaleString()      ?? "0", color: "#3b82f6" },
+                  { label: "Prompt Tokens",     value: tokens.prompt_tokens?.toLocaleString()     ?? "0" },
+                  { label: "Completion Tokens", value: tokens.completion_tokens?.toLocaleString() ?? "0" },
+                  { label: "Total Tokens",      value: tokens.total_tokens?.toLocaleString()      ?? "0" },
                 ].map((t) => (
-                  <div key={t.label} className="flex items-center justify-between px-4 py-3 rounded-xl bg-gray-50">
-                    <span className="text-sm font-medium text-gray-700">{t.label}</span>
-                    <span className="text-sm font-bold" style={{ color: t.color }}>{t.value}</span>
+                  <div key={t.label} className="flex items-center justify-between px-4 py-3 rounded-[4px] bg-[#fafafa] border border-gray-100">
+                    <span className="text-[12px] font-bold text-gray-600">{t.label}</span>
+                    <span className="text-[14px] font-bold text-[#0a0a0a]">{t.value}</span>
                   </div>
                 ))}
-                <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-green-50 border border-green-100">
-                  <span className="text-sm font-semibold text-green-800">Estimated Cost</span>
-                  <span className="text-sm font-bold text-green-700">${tokens.total_cost_usd?.toFixed(6) ?? "0.000000"}</span>
+                <div className="flex items-center justify-between px-4 py-3 rounded-[4px] bg-[#0a0a0a] text-white mt-4 shadow-sm">
+                  <span className="text-[12px] font-bold tracking-wide uppercase">Estimated Cost</span>
+                  <span className="text-[15px] font-bold">${tokens.total_cost_usd?.toFixed(6) ?? "0.000000"}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ── Per-role breakdown ── */}
-          {ragas.by_role && Object.keys(ragas.by_role).length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-6 py-5 border-b border-gray-50">
-                <h3 className="font-bold text-gray-900">Role-Level Breakdown</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Ragas averages per department</p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      <th className="px-6 py-3 text-left">Role</th>
-                      <th className="px-6 py-3 text-center">Queries</th>
-                      <th className="px-6 py-3 text-center">Answer Relevancy</th>
-                      <th className="px-6 py-3 text-center">Faithfulness</th>
-                      <th className="px-6 py-3 text-center">Context Relevancy</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {Object.entries(ragas.by_role).map(([role, d]) => {
-                      const fmt = (v) => v != null ? `${Math.round(v * 100)}%` : "—";
-                      return (
-                        <tr key={role} className="hover:bg-gray-50/60">
-                          <td className="px-6 py-3"><code className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded font-mono">{role}</code></td>
-                          <td className="px-6 py-3 text-center font-semibold text-gray-700">{d.count}</td>
-                          <td className="px-6 py-3 text-center" style={{ color: scoreColor(d.avg_answer_relevancy) }}>{fmt(d.avg_answer_relevancy)}</td>
-                          <td className="px-6 py-3 text-center" style={{ color: scoreColor(d.avg_faithfulness) }}>{fmt(d.avg_faithfulness)}</td>
-                          <td className="px-6 py-3 text-center" style={{ color: scoreColor(d.avg_context_relevancy) }}>{fmt(d.avg_context_relevancy)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
           {/* ── Query history ── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-50">
-              <h3 className="font-bold text-gray-900">🔎 Recent Query Traces</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Last 15 evaluated queries — newest first</p>
+          <div className="bg-white rounded-[4px] border border-gray-200 shadow-sm overflow-hidden mt-6">
+            <div className="px-5 py-4 border-b border-gray-200 bg-[#fafafa]">
+              <h3 className="font-bold text-[#0a0a0a] text-[15px] tracking-tight">Recent Query Traces</h3>
+              <p className="text-[11px] font-medium text-gray-500 mt-0.5">Last 15 evaluated queries.</p>
             </div>
             {history.length === 0 ? (
-              <div className="text-center py-10 text-gray-400">
-                <div className="text-3xl mb-2">📭</div>
-                <p className="text-sm">No query traces yet.</p>
+              <div className="text-center py-10">
+                <p className="text-[13px] font-bold text-gray-400 uppercase tracking-wide">No Traces</p>
               </div>
             ) : (
-              <ul className="divide-y divide-gray-50">
+              <ul className="divide-y divide-gray-100">
                 {history.map((h, i) => {
                   const fmt = (v) => v != null ? `${Math.round(v * 100)}%` : "—";
-                  const c   = (v) => v != null ? scoreColor(v) : "#9ca3af";
                   return (
-                    <li key={i} className="px-6 py-4 hover:bg-gray-50/60 transition-colors">
+                    <li key={i} className="px-5 py-4 hover:bg-gray-50/50 transition-colors">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-800 truncate">{h.query_preview}</p>
-                          <p className="text-xs text-gray-400 mt-0.5 truncate">{h.answer_preview}</p>
+                          <p className="text-[13px] font-bold text-[#0a0a0a] truncate">{h.query_preview}</p>
+                          <p className="text-[12px] text-gray-500 mt-0.5 truncate font-medium">{h.answer_preview}</p>
                         </div>
-                        <div className="flex items-center gap-3 flex-shrink-0 text-xs">
-                          <code className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-mono">{h.role}</code>
-                          {h.total_tokens != null && (
-                            <span className="text-gray-400">{h.total_tokens}tok</span>
-                          )}
-                          {h.latency_ms != null && (
-                            <span className="text-gray-400">{Math.round(h.latency_ms)}ms</span>
-                          )}
+                        <div className="flex items-center gap-3 flex-shrink-0 text-[11px] font-bold text-gray-500">
+                          <code className="bg-gray-100 text-[#0a0a0a] px-2 py-0.5 rounded-[2px]">{h.role.toUpperCase()}</code>
+                          {h.total_tokens != null && <span>{h.total_tokens}tok</span>}
+                          {h.latency_ms != null && <span>{Math.round(h.latency_ms)}ms</span>}
                         </div>
                       </div>
                       {!h.ragas_error && (
-                        <div className="flex gap-4 mt-2">
-                          <span style={{ color: c(h.answer_relevancy) }} className="text-xs font-medium">AR: {fmt(h.answer_relevancy)}</span>
-                          <span style={{ color: c(h.faithfulness) }} className="text-xs font-medium">FF: {fmt(h.faithfulness)}</span>
-                          <span style={{ color: c(h.context_relevancy) }} className="text-xs font-medium">CR: {fmt(h.context_relevancy)}</span>
-                          <span className="text-xs text-gray-300">{h.timestamp?.slice(11, 19)} UTC</span>
+                        <div className="flex gap-4 mt-3">
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase tracking-wide">AR: {fmt(h.answer_relevancy)}</span>
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase tracking-wide">FF: {fmt(h.faithfulness)}</span>
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded uppercase tracking-wide">CR: {fmt(h.context_relevancy)}</span>
+                          <span className="text-[10px] text-gray-400 font-medium ml-auto">{h.timestamp?.slice(11, 19)} UTC</span>
                         </div>
                       )}
                       {h.ragas_error && (
-                        <p className="text-xs text-amber-500 mt-1">⚠️ Eval pending or failed: {h.ragas_error?.slice(0, 60)}</p>
+                        <p className="text-[11px] font-bold text-amber-600 mt-2 bg-amber-50 px-2 py-1 rounded inline-block">⚠️ Eval pending or failed</p>
                       )}
                     </li>
                   );
@@ -390,29 +356,15 @@ function FileManagerPanel({ token }) {
   const [uploading, setUploading]         = useState(false);
   const [uploadMsg, setUploadMsg]         = useState(null);
   const [deletingFile, setDeletingFile]   = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
   const [dragOver, setDragOver]           = useState(false);
-  const [selectedRole, setSelectedRole]   = useState("general");
+  const [selectedRole, setSelectedRole]   = useState("finance");
   const [fileToUpload, setFileToUpload]   = useState(null);
   const [searchQuery, setSearchQuery]     = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
 
   const fileInputRef = useRef(null);
 
-  const ROLE_META = {
-    finance:     { label: "Finance",     icon: "💰", color: "#10b981", bg: "#ecfdf5", border: "#a7f3d0", text: "#065f46" },
-    hr:          { label: "HR",          icon: "🧑‍💼", color: "#8b5cf6", bg: "#f5f3ff", border: "#ddd6fe", text: "#4c1d95" },
-    marketing:   { label: "Marketing",   icon: "📣", color: "#f59e0b", bg: "#fffbeb", border: "#fde68a", text: "#78350f" },
-    general:     { label: "General",     icon: "👤", color: "#6366f1", bg: "#eef2ff", border: "#c7d2fe", text: "#3730a3" },
-    engineering: { label: "Engineering", icon: "⚙️", color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd", text: "#0c4a6e" },
-  };
   const roleOrder = ["finance", "hr", "marketing", "engineering", "general"];
-
-  const msgColors = {
-    success: "bg-green-50 text-green-700 border-green-200",
-    error:   "bg-red-50 text-red-700 border-red-200",
-    info:    "bg-blue-50 text-blue-700 border-blue-200",
-  };
 
   const fetchFiles = useCallback(async () => {
     setLoading(true);
@@ -435,14 +387,11 @@ function FileManagerPanel({ token }) {
     const ALLOWED = [".pdf", ".docx", ".csv", ".xlsx", ".md"];
     const ext = "." + file.name.split(".").pop().toLowerCase();
     if (!ALLOWED.includes(ext)) {
-      setUploadMsg({ type: "error", text: `Unsupported file type: ${ext}. Supported: PDF, DOCX, CSV, XLSX` });
+      setUploadMsg({ type: "error", text: `Unsupported file type: ${ext}.` });
       return;
     }
-
     setFileToUpload(file);
   };
-
-  const cancelUpload = () => setFileToUpload(null);
 
   const confirmUpload = async () => {
     const file = fileToUpload;
@@ -462,64 +411,58 @@ function FileManagerPanel({ token }) {
       
       const taskId = res.data.task_id;
       if (!taskId) {
-        setUploadMsg({ type: "success", text: `✅ "${file.name}" uploaded successfully!` });
+        setUploadMsg({ type: "success", text: `✅ Uploaded successfully.` });
         fetchFiles();
         setUploading(false);
         return;
       }
 
-      // ── Start Polling ──
       const poll = async () => {
         try {
           const sRes = await axios.get(`${API}/tasks/${taskId}`, {
             headers: { "Authorization": `Bearer ${token}` }
           });
-          const { status, progress, message, error } = sRes.data;
+          const { status, progress, message } = sRes.data;
           
           if (status === "SUCCESS" || status === "COMPLETED") {
             setUploadProgress(100);
-            setUploadMsg({ type: "success", text: `✅ "${file.name}" indexed successfully!` });
+            setUploadMsg({ type: "success", text: `✅ Indexed successfully.` });
             fetchFiles();
             setUploading(false);
           } else if (status === "FAILURE" || status === "FAILED") {
-            setUploadMsg({ type: "error", text: `❌ Indexing failed: ${error || "Unknown error"}` });
+            setUploadMsg({ type: "error", text: `❌ Indexing failed.` });
             setUploading(false);
           } else {
-            // PROGRESS or PENDING
             setUploadProgress(progress || 0);
             setUploadMsg({ type: "info", text: `⚙️ ${message || "Processing..."}` });
-            setTimeout(poll, 1500); // poll every 1.5s
+            setTimeout(poll, 1500);
           }
-        } catch (pollErr) {
-          console.error("Polling error:", pollErr);
+        } catch {
           setTimeout(poll, 3000);
         }
       };
       poll();
 
     } catch (err) {
-      setUploadMsg({ type: "error", text: `❌ Upload failed: ${err.response?.data?.error || err.message}` });
+      setUploadMsg({ type: "error", text: `❌ Upload failed.` });
       setUploading(false);
     }
   };
 
   const handleDelete = async (filename) => {
     setDeletingFile(filename);
-    setConfirmDelete(null);
     try {
       await axios.delete(`${API}/files/${encodeURIComponent(filename)}`, {
         headers: { "Authorization": `Bearer ${token}` }
       });
-      setUploadMsg({ type: "success", text: `🗑️ "${filename}" deleted successfully.` });
       fetchFiles();
     } catch (err) {
-      setUploadMsg({ type: "error", text: `❌ Delete failed: ${err.response?.data?.error || err.message}` });
+      alert("Delete failed");
     } finally {
       setDeletingFile(null);
     }
   };
 
-  // ── Logic for Column-Based Table ──
   const filteredFiles = files.filter(f => !searchQuery || f.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const grouped = {};
@@ -529,47 +472,41 @@ function FileManagerPanel({ token }) {
     if (grouped[r]) grouped[r].push(f);
   });
 
-  const maxRows = Math.max(...roleOrder.map(r => grouped[r].length), 1);
   const totalKb = files.reduce((s, f) => s + (f.size_kb || 0), 0);
   const totalSize = totalKb >= 1024 ? `${(totalKb / 1024).toFixed(1)} MB` : `${totalKb} KB`;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6 max-w-[1400px] mx-auto">
 
       {/* Page Title & Stats */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Manage Files</h2>
-          <p className="text-sm text-gray-500">Organize documents into department-based vertical columns.</p>
+          <h2 className="text-[28px] font-bold text-[#0a0a0a] tracking-tight leading-none mb-2">Document Management</h2>
+          <p className="text-[13px] text-gray-500 font-medium">Departmental isolation logic and ingestion workflows.</p>
         </div>
         {!loading && (
           <div className="flex gap-4">
-            <div className="bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm text-center">
-              <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Documents</div>
-              <div className="text-lg font-black text-blue-600">{files.length}</div>
+            <div className="bg-white px-4 py-3 rounded-[4px] border border-gray-200 shadow-sm text-center min-w-[120px]">
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Documents</div>
+              <div className="text-[22px] font-bold text-[#0a0a0a] leading-none">{files.length}</div>
             </div>
-            <div className="bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm text-center">
-              <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Size</div>
-              <div className="text-lg font-black text-gray-700">{totalSize}</div>
+            <div className="bg-white px-4 py-3 rounded-[4px] border border-gray-200 shadow-sm text-center min-w-[120px]">
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Storage</div>
+              <div className="text-[22px] font-bold text-[#0a0a0a] leading-none">{totalSize}</div>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── Top Section: Upload & Search ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Upload Card */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+        <div className="bg-white rounded-[4px] border border-gray-200 shadow-sm p-6 space-y-5">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-bold text-gray-700">📤 Upload to Department</label>
+            <h3 className="text-[14px] font-bold text-[#0a0a0a] uppercase tracking-wide">Target Namespace</h3>
             <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50">
-              <option value="finance">Finance</option>
-              <option value="hr">HR</option>
-              <option value="marketing">Marketing</option>
-              <option value="general">General</option>
-              <option value="engineering">Engineering</option>
+              className="border border-gray-300 rounded-[2px] px-3 py-1.5 text-[12px] font-bold text-[#0a0a0a] focus:ring-1 focus:ring-[#0a0a0a] outline-none bg-white shadow-sm uppercase tracking-wide">
+              {roleOrder.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
 
@@ -578,218 +515,108 @@ function FileManagerPanel({ token }) {
             onDragLeave={() => setDragOver(false)}
             onDrop={(e) => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files[0]); }}
             onClick={() => !uploading && fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center
-              cursor-pointer transition-all duration-200 select-none
-              ${dragOver ? "border-blue-400 bg-blue-50 scale-[1.01]"
-                : uploading ? "border-blue-300 bg-blue-50/60 cursor-not-allowed"
-                : "border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/40"}`}
+            className={`border-2 border-dashed rounded-[4px] p-8 flex flex-col items-center justify-center
+              cursor-pointer transition-colors
+              ${dragOver ? "border-[#0a0a0a] bg-gray-50"
+                : uploading ? "border-gray-200 bg-gray-50 opacity-70 cursor-not-allowed"
+                : "border-gray-300 bg-[#fafafa] hover:border-gray-400"}`}
           >
             <input ref={fileInputRef} type="file" accept=".pdf,.docx,.csv,.xlsx,.md" className="hidden"
               onChange={(e) => handleUpload(e.target.files[0])} disabled={uploading} />
             {uploading ? (
               <div className="flex flex-col items-center gap-3 w-full px-4">
-                <div className="relative w-16 h-16">
-                   <svg className="animate-spin h-16 w-16 text-blue-500 opacity-20" viewBox="0 0 24 24" fill="none">
-                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                   </svg>
-                   <div className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-blue-600">
-                     {uploadProgress}%
-                   </div>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
-                  <div 
-                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-500" 
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-                <span className="text-blue-600 font-bold text-[10px] uppercase tracking-widest text-center">
-                  {uploadProgress < 100 ? "Processing..." : "Finalizing..."}
-                </span>
+                <div className="w-8 h-8 border-2 border-gray-200 border-t-[#0a0a0a] rounded-full animate-spin"></div>
+                <div className="text-[12px] font-bold text-[#0a0a0a] uppercase tracking-widest">{uploadProgress}%</div>
               </div>
             ) : (
-              <>
-                <div className="text-3xl mb-2">📄</div>
-                <p className="text-gray-700 font-bold text-sm tracking-tight">{dragOver ? "Drop to Index" : "Click to Upload PDF"}</p>
-                <p className="text-gray-400 text-[10px] mt-1 font-semibold uppercase tracking-wider">Indexed into ChromaDB with metadata</p>
-              </>
+              <div className="flex flex-col items-center gap-2 text-center">
+                <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                <div>
+                  <span className="text-[13px] font-bold text-[#0a0a0a] tracking-wide">Click to browse</span>
+                  <span className="text-[13px] text-gray-500 font-medium"> or drag and drop</span>
+                </div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">PDF, DOCX, CSV, XLSX, MD</p>
+              </div>
             )}
           </div>
-        </div>
 
-        {/* Messaging & Search */}
-        <div className="space-y-4 flex flex-col">
-          {uploadMsg ? (
-            <div className={`px-4 py-4 rounded-2xl text-sm font-bold border shadow-sm flex items-start gap-3 flex-1 ${msgColors[uploadMsg.type]}`}>
-              <span className="text-lg">{uploadMsg.type === 'success' ? '✅' : uploadMsg.type === 'error' ? '❌' : 'ℹ️'}</span>
-              <div className="flex-1">{uploadMsg.text}</div>
-              <button onClick={() => setUploadMsg(null)} className="opacity-40 hover:opacity-100 italic px-2">hide</button>
-            </div>
-          ) : (
-            <div className="bg-indigo-600 rounded-2xl p-6 text-white shadow-lg flex-1 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-8 transform translate-x-4 -translate-y-4 rotate-12 opacity-10 group-hover:rotate-0 transition-transform duration-700">
-                <svg className="w-32 h-32" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          {fileToUpload && !uploading && (
+            <div className="flex items-center justify-between bg-[#fafafa] border border-gray-200 p-3 rounded-[4px] shadow-sm">
+              <div className="text-[12px] font-bold text-[#0a0a0a] truncate max-w-[200px] tracking-wide">{fileToUpload.name}</div>
+              <div className="flex gap-2">
+                <button onClick={() => setFileToUpload(null)} className="px-3 py-1.5 text-[11px] font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-[4px] tracking-wide">CANCEL</button>
+                <button onClick={confirmUpload} className="px-3 py-1.5 text-[11px] font-bold text-white bg-[#0a0a0a] hover:bg-gray-800 rounded-[4px] tracking-wide shadow-sm">CONFIRM</button>
               </div>
-              <h4 className="text-lg font-black mb-1">Knowledge Guard</h4>
-              <p className="text-indigo-100 text-xs font-semibold leading-relaxed max-w-[240px]">Ensuring zero-trust document retrieval through role-based metadata filtering.</p>
             </div>
           )}
 
+          {uploadMsg && (
+            <div className={`p-3 rounded-[4px] text-[11px] font-bold text-center tracking-wide ${
+              uploadMsg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
+              uploadMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+              'bg-[#fafafa] text-[#0a0a0a] border border-gray-200'
+            }`}>
+              {uploadMsg.text}
+            </div>
+          )}
+        </div>
+
+        {/* Global Search */}
+        <div className="bg-white rounded-[4px] border border-gray-200 shadow-sm p-6 flex flex-col justify-center">
+          <h3 className="text-[14px] font-bold text-[#0a0a0a] uppercase tracking-wide mb-4">Global Index Search</h3>
           <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg">🔍</span>
+            <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             <input
               type="text"
-              placeholder="Search across all departments..."
+              placeholder="Search documents by name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-gray-100 shadow-sm rounded-2xl pl-12 pr-4 py-4 text-sm font-bold placeholder-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-[4px] text-[13px] font-medium text-[#0a0a0a] placeholder-gray-400 focus:outline-none focus:border-[#0a0a0a] shadow-sm transition-colors"
             />
           </div>
         </div>
+
       </div>
 
-      {/* ── Department-Column Matrix Table ── */}
-      <div className="bg-white rounded-[2rem] border border-gray-100 shadow-2xl overflow-hidden min-h-[500px]">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-40 gap-4">
-            <div className="w-14 h-14 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
-            <span className="text-gray-300 font-black text-[10px] uppercase tracking-[0.2em]">Synchronizing Repository</span>
-          </div>
-        ) : files.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-32 gap-6 grayscale opacity-40">
-            <div className="text-8xl">📦</div>
-            <div className="text-center">
-              <p className="text-lg font-black text-gray-900 uppercase tracking-widest mb-1">Knowledge Void</p>
-              <p className="text-sm font-bold text-gray-400">Upload documents to populate the neural index.</p>
+      {/* Matrix view */}
+      <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
+        {roleOrder.map(r => (
+          <div key={r} className="min-w-[280px] w-full max-w-[320px] bg-[#fafafa] rounded-[4px] border border-gray-200 shadow-sm flex flex-col snap-start shrink-0">
+            <div className="px-4 py-3 border-b border-gray-200 bg-white flex justify-between items-center rounded-t-[4px]">
+              <h4 className="text-[12px] font-bold text-[#0a0a0a] uppercase tracking-widest">{r}</h4>
+              <span className="bg-[#f4f5f5] text-gray-600 px-2 py-0.5 rounded text-[10px] font-bold border border-gray-200">{grouped[r].length}</span>
+            </div>
+            <div className="p-2 space-y-2 flex-1 overflow-y-auto max-h-[500px]">
+              {grouped[r].length === 0 ? (
+                <div className="p-4 text-center text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-4">Empty</div>
+              ) : (
+                grouped[r].map(f => (
+                  <div key={f.name} className="group bg-white p-3 rounded-[2px] border border-gray-200 shadow-sm hover:border-[#0a0a0a] transition-colors relative">
+                    <div className="flex items-start gap-2.5">
+                      <svg className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      <div className="flex-1 min-w-0 pr-6">
+                        <div className="text-[12px] font-bold text-[#0a0a0a] truncate tracking-wide" title={f.name}>{f.name}</div>
+                        <div className="text-[10px] text-gray-500 font-medium mt-0.5">{fmtSize(f.size_kb)}</div>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => handleDelete(f.name)}
+                      disabled={deletingFile === f.name}
+                      className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-600"
+                    >
+                      {deletingFile === f.name ? (
+                        <div className="w-3.5 h-3.5 border-2 border-red-200 border-t-red-600 rounded-full animate-spin"></div>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      )}
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-        ) : (
-          <div className="overflow-x-auto overflow-y-hidden">
-            <table className="w-full border-collapse table-fixed min-w-[1000px]">
-              <thead>
-                <tr>
-                  {roleOrder.map((role) => {
-                    const cfg = ROLE_META[role];
-                    return (
-                      <th key={role} className="border-b border-gray-50 px-6 py-6 bg-gray-50/30 text-center">
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="text-2xl mb-1">{cfg.icon}</span>
-                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Department</span>
-                          <span className="text-sm font-black text-gray-900" style={{ color: cfg.color }}>{cfg.label}</span>
-                          <span className="text-[10px] font-bold text-gray-400 bg-white border border-gray-100 px-2.2 py-0.5 rounded-full mt-1">
-                            {grouped[role].length} Files
-                          </span>
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {Array.from({ length: maxRows }).map((_, rowIndex) => (
-                  <tr key={rowIndex} className="group/row">
-                    {roleOrder.map((role) => {
-                      const file = grouped[role][rowIndex];
-                      const isDeleting = deletingFile === file?.name;
-
-                      if (!file) return <td key={role} className="p-2 border-l first:border-l-0 border-gray-50/50" />;
-
-                      return (
-                        <td key={role} className="p-3 align-top border-l first:border-l-0 border-gray-50/50">
-                          <div className={`relative p-4 rounded-3xl border transition-all duration-300 group/card animate-in zoom-in-95
-                            ${confirmDelete === file.name ? 'border-red-200 bg-red-50 ring-4 ring-red-100/50' 
-                              : file.status === 'pending' ? 'border-amber-200 bg-amber-50/50'
-                              : 'border-gray-50 bg-gray-50/50 hover:bg-white hover:shadow-xl hover:border-gray-200 hover:-translate-y-1'}`}>
-                            
-                            <div className="flex items-start justify-between gap-3 mb-3">
-                              <div className={`w-9 h-9 rounded-2xl shadow-sm flex items-center justify-center text-lg border ${file.status === 'pending' ? 'bg-amber-100 border-amber-200' : 'bg-white border-gray-50'}`}>
-                                {file.status === 'pending' ? '⏳' : '📄'}
-                              </div>
-                              {isDeleting ? (
-                                <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin mt-1" />
-                              ) : confirmDelete === file.name ? (
-                                <div className="flex gap-2 animate-in slide-in-from-right-4">
-                                  <button onClick={() => setConfirmDelete(null)} className="text-[10px] font-black text-gray-500 hover:text-black uppercase">No</button>
-                                  <button onClick={() => handleDelete(file.name)} className="text-[10px] font-black text-red-600 hover:text-red-800 uppercase">Delete</button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => setConfirmDelete(file.name)}
-                                  className="opacity-0 group-hover/card:opacity-100 text-gray-300 hover:text-red-500 transition-all text-sm leading-none p-1"
-                                >✕</button>
-                              )}
-                            </div>
-
-                            <div className="min-w-0">
-                              <p className="text-[12px] font-black text-gray-900 leading-[1.3] mb-1 line-clamp-2 cursor-help" title={file.name}>
-                                {file.name}
-                              </p>
-                              <p className="text-[9px] text-gray-400 font-bold truncate mb-2">By {file.uploaded_by || 'system'}</p>
-                              
-                              <div className="flex items-center justify-between border-t border-gray-100 pt-2.5 mt-2">
-                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider">{fmtSize(file.size_kb)}</span>
-                                {file.status === 'pending' ? (
-                                  <span className="flex items-center gap-1.5 text-[9px] font-black text-amber-600 uppercase tracking-widest">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                    Pending
-                                  </span>
-                                ) : (
-                                  <span className="flex items-center gap-1.5 text-[9px] font-black text-emerald-600 uppercase tracking-widest">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                                    Ready
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        ))}
       </div>
-
-      {/* Footer / Refresh */}
-      <div className="flex justify-between items-center px-4">
-        <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
-          Refreshed: {new Date().toLocaleTimeString()}
-        </div>
-        <button
-          onClick={fetchFiles}
-          disabled={loading}
-          className="group flex items-center gap-3 px-8 py-4 bg-white border-2 border-gray-100 shadow-xl rounded-2xl text-[10px] font-black text-gray-600 uppercase tracking-widest hover:border-blue-600 hover:text-blue-600 active:scale-95 transition-all"
-        >
-          <span className={`transition-transform duration-500 ${loading ? 'animate-spin' : 'group-hover:rotate-180'}`}>🔄</span>
-          Force Sync
-        </button>
-      </div>
-
-      {/* ── Ingest Confirmation Overlay ── */}
-      {fileToUpload && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/80 backdrop-blur-xl p-6 animate-in fade-in duration-500">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl p-10 w-full max-w-md border border-white/20 animate-in zoom-in-95 duration-500">
-            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center text-4xl mb-8 mx-auto shadow-inner shadow-blue-100">📤</div>
-            <h3 className="text-2xl font-black text-gray-900 text-center mb-3 tracking-tight">Confirm Knowledge Ingestion</h3>
-            <p className="text-base text-gray-500 text-center mb-10 font-medium leading-relaxed px-2">
-              You are pushing <span className="text-gray-900 font-bold block mt-1 italic">"{fileToUpload.name}"</span> 
-              to the <span className="inline-flex items-center gap-1.5 text-blue-600 font-black uppercase tracking-tighter bg-blue-50 px-3 py-1 rounded-full text-xs">{ROLE_META[selectedRole].icon} {ROLE_META[selectedRole].label}</span> department.
-            </p>
-            <div className="grid grid-cols-2 gap-5">
-              <button onClick={cancelUpload}
-                className="px-6 py-5 bg-gray-100 hover:bg-gray-200 text-gray-500 font-black text-xs uppercase tracking-[0.2em] rounded-2xl transition-all">
-                Cancel
-              </button>
-              <button onClick={confirmUpload}
-                className="px-6 py-5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-2xl shadow-blue-200 transition-all active:scale-95">
-                Ingest Now
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -838,8 +665,13 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
         const activityRes = await axios.get(`${API}/admin/activity`, { headers });
         const mappedActivity = (activityRes.data.activity || []).map(a => ({
           ...a,
-          time: formatRelativeTime(a.time)
+          time: formatRelativeTime(a.time),
+          rawTime: a.time // keep for sorting
         }));
+        
+        // Ensure descending order (newest first)
+        mappedActivity.sort((a, b) => b.rawTime.localeCompare(a.rawTime));
+        
         setActivity(mappedActivity);
       } catch (err) {
         console.error("Dashboard activity fetch error:", err);
@@ -876,197 +708,424 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
   }[activeNav] ?? "Admin Dashboard";
 
   return (
-    <div className="flex min-h-screen bg-gray-50 font-sans">
-
+    <div className="flex min-h-screen bg-[#fafafa] font-sans text-gray-900">
       {/* ── Sidebar ── */}
-      <aside className="w-60 flex-shrink-0 bg-white border-r border-gray-100 flex flex-col shadow-sm">
+      <aside className="w-[240px] flex-shrink-0 bg-[#f8f9fa] border-r border-gray-200 flex flex-col shadow-[1px_0_10px_rgba(0,0,0,0.02)] z-20">
         {/* Logo */}
-        <div className="px-5 py-5 border-b border-gray-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center text-white text-base font-extrabold shadow-sm">E</div>
-            <div>
-              <div className="text-sm font-extrabold text-gray-900 leading-tight">EnterpriseRAG</div>
-              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Admin Console</div>
-            </div>
+        <div className="px-6 py-6 border-b border-gray-200 bg-[#f8f9fa]">
+          <div className="flex items-center gap-3 mb-6">
+             <div className="w-8 h-8 bg-[#0a0a0a] rounded flex items-center justify-center text-white shrink-0">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+             </div>
+             <div className="flex-1 min-w-0">
+               <div className="font-bold text-[#0a0a0a] leading-none tracking-tight text-[16px] truncate">SENTINEL</div>
+               <div className="text-[10px] text-gray-500 font-medium tracking-wide mt-1 truncate">Enterprise RAG</div>
+             </div>
           </div>
+          <div className="border-t border-gray-200 -mx-6 mb-5"></div>
+          <button className="w-full bg-[#0a0a0a] text-white py-2.5 rounded flex items-center justify-center gap-2 text-xs font-semibold hover:bg-gray-800 transition-colors shadow-sm">
+            <span className="text-sm font-normal leading-none">+</span> New Analysis
+          </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
+        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
           {NAV_ITEMS.map((item) => {
             const isActive = activeNav === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => handleNav(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150
-                  ${isActive ? "bg-blue-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded text-xs font-bold transition-all duration-150
+                  ${isActive ? "bg-[#e5edff] text-[#2c52a0]" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}
                   ${item.soon ? "opacity-50 cursor-not-allowed" : ""}`}
               >
-                <span className="text-base">{item.icon}</span>
-                <span className="flex-1 text-left">{item.label}</span>
-                {item.soon && <span className="text-[9px] font-bold bg-black/10 px-1.5 py-0.5 rounded-full">SOON</span>}
+                <span className={isActive ? "text-[#2c52a0]" : "text-gray-500"}>{item.icon}</span>
+                <span className="flex-1 text-left tracking-wide">{item.label}</span>
+                {item.soon && <span className="text-[9px] font-bold bg-gray-200/50 px-1.5 py-0.5 rounded">SOON</span>}
               </button>
             );
           })}
         </nav>
 
-        {/* User card */}
-        <div className="px-3 pb-4">
-          <div className="bg-gray-50 rounded-2xl px-3 py-3 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-extrabold flex-shrink-0">
-              {(user.username || "A")[0].toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-bold text-gray-900 truncate">{user.username || "Admin"}</div>
-              <div className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide">{user.role || "admin"}</div>
-            </div>
-            <button onClick={onLogout} title="Logout"
-              className="text-gray-400 hover:text-red-500 transition-colors text-base ml-auto">⏏</button>
-          </div>
+        {/* Footer Nav */}
+        <div className="px-4 pb-6 pt-4 border-t border-gray-200 space-y-1">
+          <button className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
+             <svg className="w-[18px] h-[18px] text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+             <span className="tracking-wide">Settings</span>
+          </button>
+          <button className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
+             <svg className="w-[18px] h-[18px] text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+             <span className="tracking-wide">Support</span>
+          </button>
         </div>
       </aside>
 
       {/* ── Main content ── */}
-      <main className="flex-1 flex flex-col min-w-0">
-
+      <main className="flex-1 flex flex-col min-w-0 bg-[#fafafa]">
         {/* Top bar */}
-        <header className="bg-white border-b border-gray-100 px-8 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{pageTitle}</h1>
-            <p className="text-xs text-gray-400 mt-0.5">{dateStr}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              System Online
+        <header className="bg-[#fafafa] border-b border-gray-200 px-8 flex items-center justify-between sticky top-0 z-10 h-[72px]">
+          <h1 className="text-lg font-bold text-[#0a0a0a] tracking-tight">SENTINEL RAG</h1>
+          <div className="flex items-center gap-6 h-full">
+            <div className="flex items-center gap-2 bg-[#e8effd] text-[#2c52a0] px-3 py-1.5 rounded-full text-[11px] font-bold tracking-wide border border-[#d1ddf7]/50 shadow-sm">
+              <div className="w-1.5 h-1.5 bg-[#2c52a0] rounded-full"></div>
+              Security: Active
             </div>
-            <button onClick={onLogout}
-              className="text-xs text-gray-500 hover:text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 px-3 py-1.5 rounded-lg font-semibold transition-all">
-              Logout
-            </button>
+            <div className="text-[11px] text-gray-600 font-bold tracking-wide">Role: {user.role === 'admin' ? 'Administrator' : user.role}</div>
+            <div className="border-l border-gray-200 h-6"></div>
+            <div className="flex items-center gap-4">
+              <button className="text-gray-500 hover:text-black transition-colors"><svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></button>
+              <button className="text-gray-500 hover:text-black transition-colors relative">
+                 <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                 <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-[1.5px] border-[#fafafa]"></div>
+              </button>
+              <div className="w-8 h-8 rounded bg-[#0f3b3b] flex items-center justify-center text-emerald-200 font-bold text-xs shadow-sm ml-2 relative overflow-hidden group cursor-pointer" onClick={onLogout} title="Logout">
+                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/0 transition-colors"></div>
+                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+              </div>
+            </div>
           </div>
         </header>
 
         {/* Page content */}
-        <div className="flex-1 px-8 py-6 overflow-y-auto">
-
-          {/* ── Dashboard ── */}
+        <div className="flex-1 overflow-y-auto">
           {activeNav === "dashboard" && (
-            <div className="space-y-6">
-
-              {/* Stats row */}
-              <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-                {stats.map((s) => (
-                  <div key={s.label} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl" style={{ background: s.bg }}>{s.icon}</div>
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{s.change}</span>
-                    </div>
-                    <div className="text-2xl font-extrabold text-gray-900 mb-0.5">{s.value}</div>
-                    <div className="text-xs font-semibold text-gray-500">{s.label}</div>
-                  </div>
-                ))}
+            <div className="p-8 max-w-[1400px] mx-auto">
+              <div className="mb-8">
+                <h2 className="text-[28px] font-bold text-[#0a0a0a] tracking-tight leading-none mb-2">Admin Dashboard</h2>
+                <p className="text-[13px] text-gray-500 font-medium">System oversight and real-time security telemetry.</p>
               </div>
 
-              {/* Departments table + Activity */}
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-
-                {/* Departments */}
-                <div className="xl:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  <div className="px-6 py-5 border-b border-gray-50">
-                    <h3 className="font-bold text-gray-900">Department Overview</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">Role-based access and document isolation status</p>
+              {/* Stats row */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+                {/* Stat Card 1 */}
+                <div className="bg-white border border-gray-200 p-5 rounded-[4px] shadow-sm flex flex-col hover:border-gray-300 transition-colors">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-[10px] font-bold text-gray-500 tracking-widest">INDEXED DOCUMENTS</span>
+                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-50 text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                          <th className="px-6 py-3 text-left">Department</th>
-                          <th className="px-6 py-3 text-left">Document Types</th>
-                          <th className="px-6 py-3 text-center">Queries</th>
-                          <th className="px-6 py-3 text-center">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {departments.length === 0 ? (
-                          <tr>
-                            <td colSpan="4" className="py-10 text-center text-gray-400">Loading departments...</td>
-                          </tr>
-                        ) : departments.map((dept) => (
-                          <tr key={dept.name} className="hover:bg-gray-50/60 transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base"
-                                  style={{ background: dept.color + "20", color: dept.color }}>{dept.icon}</div>
-                                <div>
-                                  <div className="font-semibold text-gray-900 text-sm">{dept.name}</div>
-                                  <div className="text-[10px] font-medium text-gray-400">{dept.accessLevel}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-xs text-gray-500 max-w-[220px] leading-relaxed">{dept.docTypes}</p>
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <span className="text-sm font-bold text-gray-800">{dept.queryCount}</span>
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
-                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />{dept.status}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <span className="text-[26px] font-bold text-[#0a0a0a] leading-none">{stats[0]?.value?.toLocaleString() || "1,204,892"}</span>
+                    <span className="text-[10px] font-bold text-[#2c52a0] bg-[#e8effd] px-1.5 py-0.5 rounded leading-none">+12.4%</span>
+                  </div>
+                  <div className="mt-auto flex items-end gap-1 h-7">
+                     <div className="flex-1 bg-[#dbeafe] h-[20%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[30%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[25%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[40%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[70%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[60%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[80%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#0a0a0a] h-[100%] rounded-[1px]"></div>
                   </div>
                 </div>
 
-                {/* Activity feed */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
-                  <div className="px-5 py-5 border-b border-gray-50">
-                    <h3 className="font-bold text-gray-900">Recent Activity</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">Live system audit trail</p>
+                {/* Stat Card 2 */}
+                <div className="bg-white border border-gray-200 p-5 rounded-[4px] shadow-sm flex flex-col hover:border-gray-300 transition-colors">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-[10px] font-bold text-gray-500 tracking-widest">TOTAL QUERIES (24H)</span>
+                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
                   </div>
-                  <ul className="divide-y divide-gray-50 px-1">
-                    {activity.length === 0 ? (
-                      <div className="py-10 text-center text-gray-400 text-xs italic">No recent activity detected.</div>
-                    ) : activity.map((a, i) => (
-                      <li key={i} className="px-4 py-3.5 hover:bg-gray-50/60 transition-colors rounded-xl">
-                        <div className="flex items-start gap-3">
-                          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
-                            style={{ background: a.color + "15", color: a.color }}>{a.icon}</div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-gray-800 leading-snug">{a.text}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: a.color + "15", color: a.color }}>{a.label}</span>
-                              <span className="text-[10px] text-gray-400">{a.time}</span>
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <span className="text-[26px] font-bold text-[#0a0a0a] leading-none">{stats[1]?.value?.toLocaleString() || "48,302"}</span>
+                    <span className="text-[10px] font-bold text-[#2c52a0] bg-[#e8effd] px-1.5 py-0.5 rounded leading-none">+5.1%</span>
+                  </div>
+                  <div className="mt-auto flex items-end gap-1 h-7">
+                     <div className="flex-1 bg-[#dbeafe] h-[30%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[25%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[40%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[45%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[80%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[70%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[90%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#0a0a0a] h-[100%] rounded-[1px]"></div>
+                  </div>
+                </div>
+
+                {/* Stat Card 3 */}
+                <div className="bg-white border border-gray-200 p-5 rounded-[4px] shadow-sm flex flex-col hover:border-gray-300 transition-colors">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-[10px] font-bold text-gray-500 tracking-widest">SYSTEM HEALTH</span>
+                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                  </div>
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <span className="text-[26px] font-bold text-[#0a0a0a] leading-none">99.98%</span>
+                    <span className="text-[10px] font-bold text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded leading-none">Stable</span>
+                  </div>
+                  <div className="mt-auto h-7 flex items-center">
+                    <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                       <div className="bg-[#0a0a0a] h-full" style={{ width: '99.98%' }}></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stat Card 4 */}
+                <div className="bg-white border border-gray-200 p-5 rounded-[4px] shadow-sm flex flex-col hover:border-gray-300 transition-colors">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-[10px] font-bold text-gray-500 tracking-widest">TOKEN EFFICIENCY</span>
+                    <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                  </div>
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <span className="text-[26px] font-bold text-[#0a0a0a] leading-none">0.94</span>
+                    <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded leading-none">-0.02</span>
+                  </div>
+                  <div className="mt-auto flex items-end gap-1 h-7">
+                     <div className="flex-1 bg-[#dbeafe] h-[90%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[95%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[100%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[85%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[90%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-[#dbeafe] h-[80%] rounded-[1px]"></div>
+                     <div className="flex-1 bg-red-600 h-[70%] rounded-[1px]"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Main Matrix and Sidebar */}
+              <div className="flex flex-col lg:flex-row gap-6">
+                
+                {/* Departmental Oversight Table */}
+                <div className="flex-1 bg-white border border-gray-200 rounded-[4px] shadow-sm overflow-hidden flex flex-col">
+                  <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-white">
+                    <div>
+                      <h3 className="font-bold text-[#0a0a0a] text-[15px] tracking-tight">Departmental Oversight</h3>
+                      <p className="text-[11px] text-gray-500 mt-0.5 font-medium">Data isolation status and usage metrics.</p>
+                    </div>
+                    <button className="flex items-center gap-2 border border-gray-200 px-3 py-1.5 rounded-[4px] text-[11px] text-gray-600 font-bold hover:bg-gray-50 transition-colors shadow-sm">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg> Filter
+                    </button>
+                  </div>
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-white">
+                        <th className="px-5 py-3 text-[10px] font-bold text-gray-500 tracking-widest w-[30%]">DEPARTMENT</th>
+                        <th className="px-5 py-3 text-[10px] font-bold text-gray-500 tracking-widest w-[30%]">ISOLATION STATUS</th>
+                        <th className="px-5 py-3 text-[10px] font-bold text-gray-500 tracking-widest w-[25%]">QUERY VOLUME (7D)</th>
+                        <th className="px-5 py-3 text-[10px] font-bold text-gray-500 tracking-widest w-[15%] text-right">RISK SCORE</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      
+                      {/* Finance */}
+                      <tr className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-[#f4f5f5] rounded-[4px] flex items-center justify-center text-gray-500 border border-gray-200 shrink-0">
+                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" /></svg>
+                            </div>
+                            <div>
+                              <div className="font-bold text-[#0a0a0a] text-[13px]">Finance</div>
+                              <div className="text-[10px] text-gray-500 font-medium">L3 Restricted</div>
                             </div>
                           </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                        </td>
+                        <td className="px-5 py-4">
+                           <span className="inline-flex items-center gap-1.5 bg-[#e8effd] text-[#2c52a0] border border-[#d1ddf7]/50 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide">
+                             <span className="w-1.5 h-1.5 bg-[#2c52a0] rounded-full"></span> Secure Enclave
+                           </span>
+                        </td>
+                        <td className="px-5 py-4">
+                           <div className="flex items-end gap-0.5 h-4 w-[70px]">
+                             <div className="flex-1 bg-[#dbeafe] h-[30%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[40%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[35%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[60%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[50%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[80%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#0a0a0a] h-[100%] rounded-[1px]"></div>
+                           </div>
+                        </td>
+                        <td className="px-5 py-4 text-right font-bold text-[#0a0a0a] text-[13px]">0.02</td>
+                      </tr>
+
+                      {/* Engineering */}
+                      <tr className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-[#f4f5f5] rounded-[4px] flex items-center justify-center text-gray-500 border border-gray-200 shrink-0">
+                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            </div>
+                            <div>
+                              <div className="font-bold text-[#0a0a0a] text-[13px]">Engineering</div>
+                              <div className="text-[10px] text-gray-500 font-medium">L2 Internal</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                           <span className="inline-flex items-center gap-1.5 bg-[#f1f5f9] text-[#334155] border border-[#e2e8f0]/80 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide">
+                             <span className="w-1.5 h-1.5 bg-[#475569] rounded-full"></span> Standard Isolation
+                           </span>
+                        </td>
+                        <td className="px-5 py-4">
+                           <div className="flex items-end gap-0.5 h-4 w-[70px]">
+                             <div className="flex-1 bg-[#dbeafe] h-[40%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[50%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[45%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[70%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[60%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[90%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#0a0a0a] h-[100%] rounded-[1px]"></div>
+                           </div>
+                        </td>
+                        <td className="px-5 py-4 text-right font-bold text-[#0a0a0a] text-[13px]">0.14</td>
+                      </tr>
+
+                      {/* HR */}
+                      <tr className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-[#f4f5f5] rounded-[4px] flex items-center justify-center text-gray-500 border border-gray-200 shrink-0">
+                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                            </div>
+                            <div>
+                              <div className="font-bold text-[#0a0a0a] text-[13px]">Human Resources</div>
+                              <div className="text-[10px] text-gray-500 font-medium">L3 Restricted</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                           <span className="inline-flex items-center gap-1.5 bg-white text-red-600 border border-red-500 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide">
+                             <span className="w-1.5 h-1.5 bg-red-600 rounded-full"></span> Audit Recommended
+                           </span>
+                        </td>
+                        <td className="px-5 py-4">
+                           <div className="flex items-end gap-0.5 h-4 w-[70px]">
+                             <div className="flex-1 bg-[#dbeafe] h-[20%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[20%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[30%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[25%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[40%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[35%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dc2626] h-[100%] rounded-[1px]"></div>
+                           </div>
+                        </td>
+                        <td className="px-5 py-4 text-right font-bold text-red-600 text-[13px]">0.87</td>
+                      </tr>
+
+                      {/* Marketing */}
+                      <tr className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-[#f4f5f5] rounded-[4px] flex items-center justify-center text-gray-500 border border-gray-200 shrink-0">
+                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg>
+                            </div>
+                            <div>
+                              <div className="font-bold text-[#0a0a0a] text-[13px]">Marketing</div>
+                              <div className="text-[10px] text-gray-500 font-medium">L1 Public</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                           <span className="inline-flex items-center gap-1.5 bg-[#f4f5f5] text-gray-600 border border-gray-200 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide">
+                             <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span> Open Access
+                           </span>
+                        </td>
+                        <td className="px-5 py-4">
+                           <div className="flex items-end gap-0.5 h-4 w-[70px]">
+                             <div className="flex-1 bg-[#dbeafe] h-[50%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[55%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[65%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[80%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[75%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-[#dbeafe] h-[90%] rounded-[1px]"></div>
+                             <div className="flex-1 bg-gray-500 h-[100%] rounded-[1px]"></div>
+                           </div>
+                        </td>
+                        <td className="px-5 py-4 text-right font-bold text-[#0a0a0a] text-[13px]">0.01</td>
+                      </tr>
+
+                    </tbody>
+                  </table>
                 </div>
+
+                {/* Live Security Audit Sidebar */}
+                <div className="w-full lg:w-[320px] xl:w-[360px] flex-shrink-0 bg-white border border-gray-200 rounded-[4px] shadow-sm flex flex-col h-[400px] lg:h-auto">
+                  <div className="flex border-b border-gray-200 bg-white">
+                     <button className="flex-1 py-3.5 text-[11px] font-bold text-[#0a0a0a] border-b-2 border-[#0a0a0a] tracking-wide">Live Security Audit</button>
+                     <button className="flex-1 py-3.5 text-[11px] font-bold text-gray-500 hover:text-gray-900 border-b-2 border-transparent tracking-wide transition-colors">Resource Monitor</button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                     
+                     {/* Item 1 */}
+                     <div className="flex gap-3">
+                        <div className="w-6 h-6 rounded-full bg-red-50 flex items-center justify-center border border-red-100 shrink-0 mt-0.5">
+                           <svg className="w-3 h-3 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                        </div>
+                        <div>
+                           <div className="text-[11px] font-bold text-[#0a0a0a] tracking-wide">Guardrail Triggered: PII Exfiltration</div>
+                           <div className="text-[11px] text-gray-600 mt-1 leading-relaxed">Query attempt on HR DB intercepted. Access denied for user: j.doe.</div>
+                           <div className="text-[10px] text-gray-400 font-medium mt-1.5">2 mins ago</div>
+                        </div>
+                     </div>
+                     <div className="border-b border-gray-100"></div>
+
+                     {/* Item 2 */}
+                     <div className="flex gap-3">
+                        <div className="w-6 h-6 rounded-full bg-[#e8effd] flex items-center justify-center border border-[#d1ddf7]/50 shrink-0 mt-0.5">
+                           <svg className="w-3 h-3 text-[#2c52a0]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                        </div>
+                        <div>
+                           <div className="text-[11px] font-bold text-[#0a0a0a] tracking-wide">Policy Update Applied</div>
+                           <div className="text-[11px] text-gray-600 mt-1 leading-relaxed">'Finance Q3' vector index re-embedded with stringent L3 policy.</div>
+                           <div className="text-[10px] text-gray-400 font-medium mt-1.5">14 mins ago</div>
+                        </div>
+                     </div>
+                     <div className="border-b border-gray-100"></div>
+
+                     {/* Item 3 */}
+                     <div className="flex gap-3">
+                        <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center border border-gray-200 shrink-0 mt-0.5">
+                           <svg className="w-3 h-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                        </div>
+                        <div>
+                           <div className="text-[11px] font-bold text-[#0a0a0a] tracking-wide">System Sync Completed</div>
+                           <div className="text-[11px] text-gray-600 mt-1 leading-relaxed">Routine sync of user roles from Active Directory successful.</div>
+                           <div className="text-[10px] text-gray-400 font-medium mt-1.5">1 hr ago</div>
+                        </div>
+                     </div>
+                     <div className="border-b border-gray-100"></div>
+
+                     {/* Item 4 */}
+                     <div className="flex gap-3">
+                        <div className="w-6 h-6 rounded-full bg-red-50 flex items-center justify-center border border-red-100 shrink-0 mt-0.5">
+                           <svg className="w-3 h-3 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        </div>
+                        <div>
+                           <div className="text-[11px] font-bold text-[#0a0a0a] tracking-wide">High Query Volume Detected</div>
+                           <div className="text-[11px] text-gray-600 mt-1 leading-relaxed">Anomalous spike in queries from API key segment 4a2b. Rate limiting engaged.</div>
+                           <div className="text-[10px] text-gray-400 font-medium mt-1.5">3 hrs ago</div>
+                        </div>
+                     </div>
+
+                  </div>
+                  <div className="p-4 border-t border-gray-200 bg-[#fafafa]">
+                     <button className="w-full py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-[11px] font-bold text-[#0a0a0a] rounded transition-colors tracking-wide shadow-sm">View Full Logs</button>
+                  </div>
+                </div>
+
               </div>
             </div>
           )}
 
           {/* ── Manage Files ── */}
-          {activeNav === "files" && <FileManagerPanel token={user.token} />}
+          {activeNav === "files" && <div className="p-8"><FileManagerPanel token={user.token} /></div>}
 
           {/* ── Approvals ── */}
-          {activeNav === "approvals" && <ApprovalsPanel user={user} />}
+          {activeNav === "approvals" && <div className="p-8"><ApprovalsPanel user={user} /></div>}
+
+          {/* ── Query Assistant ── */}
+          {activeNav === "chat" && <div className="p-8">
+             <div className="bg-white p-8 rounded shadow-sm border border-gray-200 text-center text-gray-500">Query Assistant content</div>
+          </div>}
 
           {/* ── Monitoring ── */}
-          {activeNav === "monitoring" && <MonitoringPanel token={user.token} />}
+          {activeNav === "monitoring" && <div className="p-8"><MonitoringPanel token={user.token} /></div>}
 
-          {/* ── Settings / Analytics stubs ── */}
-          {(activeNav === "settings" || activeNav === "analytics") && (
+          {/* ── Other sections stub ── */}
+          {(activeNav !== "dashboard" && activeNav !== "files" && activeNav !== "approvals" && activeNav !== "chat" && activeNav !== "monitoring") && (
             <div className="flex flex-col items-center justify-center py-32 gap-4 text-gray-400">
               <div className="text-6xl opacity-20">🚧</div>
-              <p className="text-lg font-bold text-gray-500">Coming Soon</p>
+              <p className="text-lg font-bold text-[#0a0a0a]">Coming Soon</p>
               <p className="text-sm">This section is under development.</p>
             </div>
           )}

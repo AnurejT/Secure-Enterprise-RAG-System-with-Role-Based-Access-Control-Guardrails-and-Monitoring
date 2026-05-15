@@ -7,50 +7,14 @@ const API = "http://127.0.0.1:5000/api/auth";
 function BrandLogo() {
   return (
     <div className="flex flex-col items-center justify-center mb-8">
-      <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-        {/* Abstract AI / Network Node */}
-        <circle cx="50" cy="50" r="40" stroke="white" strokeWidth="1.5" strokeDasharray="4 4" fill="transparent" opacity="0.6"/>
-        <circle cx="50" cy="50" r="25" stroke="white" strokeWidth="2" fill="transparent" />
-        <circle cx="50" cy="25" r="5" fill="white" />
-        <circle cx="75" cy="50" r="5" fill="white" />
-        <circle cx="50" cy="75" r="5" fill="white" />
-        <circle cx="25" cy="50" r="5" fill="white" />
-        <circle cx="50" cy="50" r="8" fill="white" />
-        <path d="M50 25 L50 42 M75 50 L58 50 M50 75 L50 58 M25 50 L42 50" stroke="white" strokeWidth="2" opacity="0.8"/>
-      </svg>
-      <h1 className="text-white text-xl font-semibold tracking-wider mt-4 shadow-sm text-center">
-        ENTERPRISE KNOWLEDGE <br/>
-        <span className="font-light opacity-90 text-lg">AI ASSISTANT</span>
+      <div className="w-12 h-12 bg-[#0a0a0a] rounded-[4px] flex items-center justify-center text-white mb-4 shadow-sm">
+        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <h1 className="text-[#0a0a0a] text-[22px] font-bold tracking-tight text-center leading-tight">
+        SENTINEL <br/>
+        <span className="text-[11px] text-gray-500 font-medium tracking-widest uppercase mt-1 block">Enterprise RAG</span>
       </h1>
     </div>
-  );
-}
-
-function TabIconGeneral() {
-  // SVG approximating the "Patient" icon with a sling from the image
-  return (
-    <svg width="60" height="60" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="30" r="15" fill="#fca5a5" />
-      {/* Shirt */}
-      <path d="M25 80 C 25 50, 75 50, 75 80" fill="#38bdf8" />
-      {/* Sling */}
-      <path d="M25 80 L 75 50 L 75 60 L 25 90 Z" fill="#e0f2fe" opacity="0.9" />
-      <rect x="40" y="60" width="20" height="20" fill="#fca5a5" />
-    </svg>
-  );
-}
-
-function TabIconAdmin() {
-  // SVG approximating the doctor icon from the image
-  return (
-    <svg width="60" height="60" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="30" r="15" fill="#fed7aa" />
-      {/* Coat */}
-      <path d="M30 80 C 30 50, 70 50, 70 80" fill="#f1f5f9" />
-      {/* Stethoscope */}
-      <path d="M40 55 L 45 70 L 55 70 L 60 55" stroke="#38bdf8" strokeWidth="3" fill="none" />
-      <circle cx="45" cy="70" r="4" fill="#38bdf8" />
-    </svg>
   );
 }
 
@@ -58,19 +22,11 @@ function CustomInput({ id, label, type, value, onChange, placeholder, error, sho
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const isPasswordField = id === "password";
   
-  // Only show label if it's the email field as per the reference image
-  const showLabel = label === "Email";
-  const isValid = value.length > 0 && !error;
-
   const currentType = isPasswordField ? (isPasswordVisible ? "text" : "password") : type;
 
   return (
-    <div className={`mb-6 relative ${showForgot ? "mb-8" : ""}`}>
-      {showLabel && (
-        <div className="absolute -top-3 right-4 bg-[#22d3ee] text-white text-xs px-3 py-0.5 rounded-sm shadow-sm z-10 font-medium tracking-wide">
-          {label}
-        </div>
-      )}
+    <div className={`mb-5 relative`}>
+      <label className="block text-[11px] font-bold text-gray-500 tracking-wide uppercase mb-1.5">{label}</label>
       <div className="relative">
         <input
           id={id}
@@ -78,48 +34,30 @@ function CustomInput({ id, label, type, value, onChange, placeholder, error, sho
           value={value}
           onChange={onChange}
           placeholder={placeholder}
-          className={`w-full px-4 py-3.5 rounded border ${
-            error ? "border-red-400 bg-red-50" : "border-gray-200"
-          } text-gray-800 placeholder-gray-500 text-sm focus:outline-none focus:border-[#22d3ee] transition-colors pr-12`}
+          className={`w-full px-3.5 py-2.5 rounded-[4px] border ${
+            error ? "border-red-500 bg-red-50 text-red-900" : "border-gray-300 focus:border-[#0a0a0a]"
+          } text-[#0a0a0a] placeholder-gray-400 text-[13px] font-medium focus:outline-none focus:ring-1 focus:ring-[#0a0a0a] transition-colors pr-10`}
         />
         
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          {/* Password Toggle */}
-          {isPasswordField && (
-            <button
-              type="button"
-              onClick={() => setIsPasswordVisible(!isPasswordVisible)}
-              className="text-gray-400 hover:text-[#22d3ee] transition-colors p-1"
-            >
-              {isPasswordVisible ? (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                  <line x1="1" y1="1" x2="23" y2="23"></line>
-                </svg>
-              ) : (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                  <circle cx="12" cy="12" r="3"></circle>
-                </svg>
-              )}
-            </button>
-          )}
-
-          {/* Valid checkmark */}
-          {isValid && (
-            <div className="bg-[#4ade80] rounded-full p-0.5">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-              </svg>
-            </div>
-          )}
-        </div>
+        {isPasswordField && (
+          <button
+            type="button"
+            onClick={() => setIsPasswordVisible(!isPasswordVisible)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#0a0a0a] transition-colors p-1"
+          >
+            {isPasswordVisible ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            )}
+          </button>
+        )}
       </div>
-      {error && <p className="text-xs text-red-500 mt-1 absolute">{error}</p>}
+      {error && <p className="text-[11px] font-bold text-red-500 mt-1.5">{error}</p>}
       {showForgot && (
         <div className="text-right mt-2">
-          <a href="#" className="text-xs text-gray-500 font-semibold hover:text-[#22d3ee] transition-colors">
-            Forget Password
+          <a href="#" className="text-[11px] text-gray-500 font-bold hover:text-[#0a0a0a] transition-colors">
+            Forgot Password?
           </a>
         </div>
       )}
@@ -164,68 +102,43 @@ export default function Login({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative" style={{ background: "linear-gradient(135deg, #0ea5e9, #22d3ee)" }}>
-      
-      {/* Decorative background circle */}
-      <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-[#38bdf8] rounded-full opacity-50 blur-3xl"></div>
-      
-      <div className="relative z-10 w-full max-w-[400px]">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#fafafa] font-sans">
+      <div className="w-full max-w-[400px]">
         <BrandLogo />
 
-        <div className="bg-white rounded shadow-2xl p-6 relative">
+        <div className="bg-white rounded-[4px] border border-gray-200 shadow-sm p-8">
           
           {/* Tab Selector */}
-          <div className="flex gap-4 mb-8">
-            
-            {/* Admin Tab */}
-            <div 
-              onClick={() => { setActiveTab("admin"); setErrors({}); }}
-              className={`flex-1 flex flex-col items-center justify-center py-5 border rounded cursor-pointer relative transition-all duration-300 ${
-                isAdmin ? "border-gray-200 shadow-md" : "border-gray-100 opacity-60 hover:opacity-100"
-              }`}
-            >
-              <TabIconAdmin />
-              <span className="text-[#38bdf8] font-semibold mt-3 text-sm tracking-wide">Admin Sign In</span>
-              
-              {isAdmin && (
-                <div className="absolute -bottom-3 right-0 -mr-2 bg-[#0ea5e9] rounded-full p-1 border-4 border-white shadow-sm z-20">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
-                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                  </svg>
-                </div>
-              )}
-            </div>
-
-            {/* General Tab */}
-            <div 
+          <div className="flex mb-8 border border-gray-200 rounded-[4px] p-1 bg-gray-50">
+            <button 
+              type="button"
               onClick={() => { setActiveTab("general"); setErrors({}); }}
-              className={`flex-1 flex flex-col items-center justify-center py-5 border rounded cursor-pointer relative transition-all duration-300 ${
-                !isAdmin ? "border-gray-200 shadow-md" : "border-gray-100 opacity-60 hover:opacity-100"
+              className={`flex-1 py-2 text-[12px] font-bold rounded-[3px] transition-colors ${
+                !isAdmin ? "bg-white text-[#0a0a0a] shadow-sm border border-gray-200/60" : "text-gray-500 hover:text-[#0a0a0a]"
               }`}
             >
-              <TabIconGeneral />
-              <span className="text-[#38bdf8] font-semibold mt-3 text-sm tracking-wide">Sign In</span>
-              
-              {!isAdmin && (
-                <div className="absolute -bottom-3 right-0 -mr-2 bg-[#0ea5e9] rounded-full p-1 border-4 border-white shadow-sm z-20">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
-                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                  </svg>
-                </div>
-              )}
-            </div>
-
+              Standard Sign In
+            </button>
+            <button 
+              type="button"
+              onClick={() => { setActiveTab("admin"); setErrors({}); }}
+              className={`flex-1 py-2 text-[12px] font-bold rounded-[3px] transition-colors ${
+                isAdmin ? "bg-white text-[#0a0a0a] shadow-sm border border-gray-200/60" : "text-gray-500 hover:text-[#0a0a0a]"
+              }`}
+            >
+              Administrator
+            </button>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} noValidate>
             <CustomInput
               id="email"
-              label="Email"
+              label="Email Address"
               type="email"
               value={email}
               onChange={(e) => { setEmail(e.target.value); setErrors((p) => ({ ...p, email: "" })); }}
-              placeholder={isAdmin ? "admin@company.com" : "you@company.com"}
+              placeholder={isAdmin ? "admin@sentinel.local" : "user@department.local"}
               error={errors.email}
             />
 
@@ -241,19 +154,23 @@ export default function Login({ onLogin }) {
             />
 
             {errors.form && (
-              <div className="text-center text-sm text-red-500 mb-4">{errors.form}</div>
+              <div className="text-center text-[12px] font-bold text-red-500 mb-4 bg-red-50 border border-red-200 py-2 rounded-[4px]">{errors.form}</div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#38bdf8] hover:bg-[#0ea5e9] text-white font-semibold py-3.5 rounded mt-2 transition-colors disabled:opacity-70 tracking-wide shadow-md"
+              className="w-full bg-[#0a0a0a] hover:bg-gray-800 text-white font-bold py-3 text-[13px] rounded-[4px] mt-4 transition-colors disabled:opacity-70 tracking-wide"
             >
-              {loading ? "Signing in..." : "Login"}
+              {loading ? "AUTHENTICATING..." : "SIGN IN"}
             </button>
           </form>
 
         </div>
+        
+        <p className="text-center text-[11px] font-bold text-gray-400 mt-8 tracking-wide">
+          SECURED BY SENTINEL RAG
+        </p>
       </div>
     </div>
   );
