@@ -3,9 +3,12 @@ backend/core/config.py
 Centralised application configuration loaded from .env
 """
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from project root
+env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 # ── Flask ─────────────────────────────────────────────────────────────
 SECRET_KEY: str = os.getenv("SECRET_KEY", "enterprise-rag-secret-key-2026")

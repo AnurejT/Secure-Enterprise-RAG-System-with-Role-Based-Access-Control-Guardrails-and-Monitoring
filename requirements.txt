@@ -28,3 +28,4 @@ redis
 psycopg2-binary
 Flask-Migrate
 docx2txt
+python-dotenv

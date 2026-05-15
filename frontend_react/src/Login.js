@@ -55,9 +55,14 @@ function TabIconAdmin() {
 }
 
 function CustomInput({ id, label, type, value, onChange, placeholder, error, showForgot }) {
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const isPasswordField = id === "password";
+  
   // Only show label if it's the email field as per the reference image
   const showLabel = label === "Email";
   const isValid = value.length > 0 && !error;
+
+  const currentType = isPasswordField ? (isPasswordVisible ? "text" : "password") : type;
 
   return (
     <div className={`mb-6 relative ${showForgot ? "mb-8" : ""}`}>
@@ -69,22 +74,46 @@ function CustomInput({ id, label, type, value, onChange, placeholder, error, sho
       <div className="relative">
         <input
           id={id}
-          type={type}
+          type={currentType}
           value={value}
           onChange={onChange}
           placeholder={placeholder}
           className={`w-full px-4 py-3.5 rounded border ${
             error ? "border-red-400 bg-red-50" : "border-gray-200"
-          } text-gray-800 placeholder-gray-500 text-sm focus:outline-none focus:border-[#22d3ee] transition-colors`}
+          } text-gray-800 placeholder-gray-500 text-sm focus:outline-none focus:border-[#22d3ee] transition-colors pr-12`}
         />
-        {/* Valid checkmark */}
-        {isValid && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-[#4ade80] rounded-full p-0.5">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-            </svg>
-          </div>
-        )}
+        
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          {/* Password Toggle */}
+          {isPasswordField && (
+            <button
+              type="button"
+              onClick={() => setIsPasswordVisible(!isPasswordVisible)}
+              className="text-gray-400 hover:text-[#22d3ee] transition-colors p-1"
+            >
+              {isPasswordVisible ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                  <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              )}
+            </button>
+          )}
+
+          {/* Valid checkmark */}
+          {isValid && (
+            <div className="bg-[#4ade80] rounded-full p-0.5">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+            </div>
+          )}
+        </div>
       </div>
       {error && <p className="text-xs text-red-500 mt-1 absolute">{error}</p>}
       {showForgot && (
@@ -126,7 +155,7 @@ export default function Login({ onLogin }) {
         email: email.trim().toLowerCase(),
         password,
       });
-      onLogin({ ...res.data.user, token: res.data.token });
+      onLogin({ ...res.data.user, token: res.data.access_token });
     } catch (err) {
       setLoading(false);
       const msg = err.response?.data?.error || "Invalid credentials.";

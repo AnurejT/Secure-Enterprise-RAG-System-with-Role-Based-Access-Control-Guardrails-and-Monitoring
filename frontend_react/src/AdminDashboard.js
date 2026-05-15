@@ -36,6 +36,18 @@ const NAV_ITEMS = [
   { id: "settings",  label: "Settings",        icon: "⚙️",  soon: true },
 ];
 
+function formatRelativeTime(isoString) {
+  if (!isoString) return "Just now";
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now - date) / 1000);
+
+  if (diffInSeconds < 60) return "Just now";
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hr ago`;
+  return date.toLocaleDateString();
+}
+
 // ─── Score progress bar ─────────────────────────────────────────
 function ScoreBar({ label, value, color }) {
   const pct = value != null ? Math.round(value * 100) : null;
@@ -681,24 +693,60 @@ function FileManagerPanel({ token }) {
 // ─── Main Admin Dashboard ─────────────────────────────────────────
 export default function AdminDashboard({ user, onLogout, onOpenChat }) {
   const [activeNav, setActiveNav] = useState("dashboard");
-  const [fileCount, setFileCount] = useState("—");
+  const [stats, setStats] = useState([
+    { label: "Indexed Documents", value: "—", icon: "📄", change: "...", color: "#3b82f6", bg: "#eff6ff" },
+    { label: "Queries Today", value: "—", icon: "🔍", change: "...", color: "#10b981", bg: "#ecfdf5" },
+    { label: "Active Departments", value: "—", icon: "🏢", change: "...", color: "#8b5cf6", bg: "#f5f3ff" },
+    { label: "System Status", value: "Online", icon: "⚡", change: "100% uptime", color: "#f59e0b", bg: "#fffbeb" },
+  ]);
+  const [departments, setDepartments] = useState([]);
+  const [activity, setActivity] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Live file count for the stats card
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const [statsRes, deptsRes, activityRes] = await Promise.all([
+        axios.get(`${API}/admin/stats`, { headers: { "Authorization": `Bearer ${user.token}` } }),
+        axios.get(`${API}/admin/departments`, { headers: { "Authorization": `Bearer ${user.token}` } }),
+        axios.get(`${API}/admin/activity`, { headers: { "Authorization": `Bearer ${user.token}` } }),
+      ]);
+
+      const s = statsRes.data;
+      setStats([
+        { label: "Indexed Documents", value: s.total_docs, icon: "📄", change: "Live count", color: "#3b82f6", bg: "#eff6ff" },
+        { label: "Queries Today", value: s.total_queries, icon: "🔍", change: "Evaluated", color: "#10b981", bg: "#ecfdf5" },
+        { label: "Active Departments", value: s.active_departments, icon: "🏢", change: "All online", color: "#8b5cf6", bg: "#f5f3ff" },
+        { label: "System Status", value: s.system_status, icon: "⚡", change: s.uptime || "100% uptime", color: "#f59e0b", bg: "#fffbeb" },
+      ]);
+
+      setDepartments(deptsRes.data.departments || []);
+      
+      const mappedActivity = (activityRes.data.activity || []).map(a => ({
+        ...a,
+        time: formatRelativeTime(a.time)
+      }));
+      setActivity(mappedActivity);
+
+    } catch (err) {
+      console.error("Dashboard data fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [user.token]);
+
   useEffect(() => {
-    axios.get(`${API}/files`, { headers: { "Authorization": `Bearer ${user.token}` } })
-      .then((res) => setFileCount(String(res.data.files?.length ?? "—")))
-      .catch(() => {});
-  }, [activeNav, user.token]);
+    if (activeNav === "dashboard") {
+      fetchDashboardData();
+      const interval = setInterval(fetchDashboardData, 30_000);
+      return () => clearInterval(interval);
+    }
+  }, [activeNav, fetchDashboardData]);
 
   const handleNav = (id) => {
     if (id === "chat")                          { onOpenChat(); return; }
     if (id === "analytics" || id === "settings") return;
     setActiveNav(id);
   };
-
-  const liveStats = STATS.map((s) =>
-    s.label === "Indexed Documents" ? { ...s, value: fileCount } : s
-  );
 
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
@@ -791,7 +839,7 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
 
               {/* Stats row */}
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-                {liveStats.map((s) => (
+                {stats.map((s) => (
                   <div key={s.label} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
                     <div className="flex justify-between items-start mb-3">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl" style={{ background: s.bg }}>{s.icon}</div>
@@ -823,7 +871,11 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {DEPARTMENTS.map((dept) => (
+                        {departments.length === 0 ? (
+                          <tr>
+                            <td colSpan="4" className="py-10 text-center text-gray-400">Loading departments...</td>
+                          </tr>
+                        ) : departments.map((dept) => (
                           <tr key={dept.name} className="hover:bg-gray-50/60 transition-colors">
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2.5">
@@ -860,7 +912,9 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
                     <p className="text-xs text-gray-400 mt-0.5">Live system audit trail</p>
                   </div>
                   <ul className="divide-y divide-gray-50 px-1">
-                    {ACTIVITY.map((a, i) => (
+                    {activity.length === 0 ? (
+                      <div className="py-10 text-center text-gray-400 text-xs italic">No recent activity detected.</div>
+                    ) : activity.map((a, i) => (
                       <li key={i} className="px-4 py-3.5 hover:bg-gray-50/60 transition-colors rounded-xl">
                         <div className="flex items-start gap-3">
                           <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0"

@@ -5,6 +5,7 @@ Core API blueprint — document upload/delete, query, chat history.
 import json
 import os
 import re
+from datetime import datetime
 
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 from werkzeug.utils import secure_filename
@@ -19,6 +20,7 @@ from backend.services.rag_pipeline import process_query, process_query_stream
 from backend.tasks.ingestion_tasks import ingest_document_task
 from backend.tasks.eval_tasks import run_ragas_eval_task
 from celery.result import AsyncResult
+from backend.monitoring import repository as monitoring_repo
 
 api_routes = Blueprint("api_routes", __name__)
 
@@ -339,3 +341,124 @@ def get_task_status(task_id):
         response["error"]    = str(task_result.info)
         
     return jsonify(response)
+
+
+# ── Admin Dashboard Helpers ───────────────────────────────────────────
+
+@api_routes.route("/admin/stats", methods=["GET"])
+@token_required
+def get_admin_stats():
+    """
+    Consolidated stats for the admin dashboard.
+    """
+    try:
+        # 1. Document Count
+        doc_count = 0
+        if os.path.exists(DOCUMENTS_DIR):
+            doc_count = len([f for f in os.listdir(DOCUMENTS_DIR) 
+                             if os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS])
+        
+        # 2. Queries Today
+        metrics = monitoring_repo.get_aggregate()
+        query_count = metrics.get("total_queries", 0)
+        
+        # 3. Active Departments
+        md = _load_metadata()
+        active_roles = set(md.values())
+        if not active_roles:
+            active_roles = {"general"}
+        
+        return jsonify({
+            "total_docs": doc_count,
+            "total_queries": query_count,
+            "active_departments": len(active_roles),
+            "system_status": "Online",
+            "uptime": "100%"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_routes.route("/admin/activity", methods=["GET"])
+@token_required
+def get_admin_activity():
+    """
+    Combined activity feed for the admin dashboard.
+    """
+    try:
+        activity = []
+        
+        # 1. Get recent evals (queries)
+        evals = monitoring_repo.get_recent_evals(10)
+        for e in evals:
+            activity.append({
+                "time": e["timestamp"],
+                "icon": "🔍",
+                "text": f"{e['role'].upper()} user queried: {e['query_preview']}",
+                "label": "Query",
+                "color": "#3b82f6"
+            })
+            
+        # 2. Get file uploads (from documents directory)
+        # Note: In a real app, you'd have an audit log. 
+        # Here we'll just show the most recent files as "uploads".
+        if os.path.exists(DOCUMENTS_DIR):
+            files = []
+            for f in os.listdir(DOCUMENTS_DIR):
+                if os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS:
+                    stat = os.stat(os.path.join(DOCUMENTS_DIR, f))
+                    files.append((f, stat.st_mtime))
+            
+            # Sort by mtime descending
+            files.sort(key=lambda x: x[1], reverse=True)
+            for f, mtime in files[:5]:
+                dt = datetime.fromtimestamp(mtime).isoformat() + "Z"
+                activity.append({
+                    "time": dt,
+                    "icon": "📄",
+                    "text": f"Document uploaded: {f}",
+                    "label": "Upload",
+                    "color": "#10b981"
+                })
+        
+        # Sort combined activity by time descending
+        activity.sort(key=lambda x: x["time"], reverse=True)
+        
+        return jsonify({"activity": activity[:15]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_routes.route("/admin/departments", methods=["GET"])
+@token_required
+def get_admin_departments():
+    """
+    Department-specific metrics and status.
+    """
+    try:
+        metrics = monitoring_repo.get_aggregate()
+        role_stats = metrics.get("by_role", {})
+        
+        # We define the departments we want to track
+        # In a real app, this might come from a DB table
+        DEPT_CONFIG = [
+            { "name": "Finance",     "icon": "💰", "role": "finance",     "color": "#10b981", "accessLevel": "L3 Restricted", "docTypes": "Invoices, Reports, Budgets" },
+            { "name": "HR",          "icon": "🧑‍💼", "role": "hr",          "color": "#8b5cf6", "accessLevel": "L2 Internal",   "docTypes": "Policies, Payroll, CVs" },
+            { "name": "Marketing",   "icon": "📣", "role": "marketing",   "color": "#f59e0b", "accessLevel": "L1 Public",     "docTypes": "Campaigns, Data, Ads" },
+            { "name": "General",     "icon": "👤", "role": "general",     "color": "#6366f1", "accessLevel": "L1 Public",     "docTypes": "General Info, Manuals" },
+            { "name": "Engineering", "icon": "⚙️", "role": "engineering", "color": "#0ea5e9", "accessLevel": "L2 Internal",   "docTypes": "Technical Docs, Architecture" },
+        ]
+        
+        departments = []
+        for d in DEPT_CONFIG:
+            role = d["role"]
+            stats = role_stats.get(role, {})
+            departments.append({
+                **d,
+                "queryCount": stats.get("count", 0),
+                "status": "Active" if stats.get("count", 0) > 0 else "Secure"
+            })
+            
+        return jsonify({"departments": departments})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

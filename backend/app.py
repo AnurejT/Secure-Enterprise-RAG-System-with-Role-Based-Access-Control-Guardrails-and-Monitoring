@@ -71,8 +71,28 @@ def create_app() -> Flask:
                     role="admin"
                 )
                 db.session.add(admin)
-                db.session.commit()
                 print("[Database] Admin user seeded.")
+
+            # Seed department users if they don't exist
+            dept_users = [
+                {"name": "Finance User", "email": "finance@company.com", "role": "finance"},
+                {"name": "HR User", "email": "hr@company.com", "role": "hr"},
+                {"name": "Marketing User", "email": "marketing@company.com", "role": "marketing"},
+                {"name": "Engineering User", "email": "engineering@company.com", "role": "engineering"},
+                {"name": "General User", "email": "user@company.com", "role": "general"},
+            ]
+            for du in dept_users:
+                if not User.query.filter_by(email=du["email"]).first():
+                    u = User(
+                        name=du["name"],
+                        email=du["email"],
+                        password_hash=bcrypt.generate_password_hash("User@123").decode("utf-8"),
+                        role=du["role"]
+                    )
+                    db.session.add(u)
+                    print(f"[Database] Seeded {du['role']} user: {du['email']}")
+            
+            db.session.commit()
 
     @app.before_request
     def log_request_info():
