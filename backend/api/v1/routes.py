@@ -11,6 +11,7 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from werkzeug.utils import secure_filename
 
 from backend.core.security import token_required
+from backend.rbac.decorators import require_admin
 from backend.core.extensions import db
 from backend.core.config import DOCUMENTS_DIR, METADATA_FILE, ALLOWED_EXTENSIONS
 from backend.models.message import Message
@@ -30,7 +31,15 @@ def _load_metadata() -> dict:
     if os.path.exists(METADATA_FILE):
         try:
             with open(METADATA_FILE, "r") as f:
-                return json.load(f)
+                data = json.load(f)
+                # Migration: Convert old string values to dict structure if needed
+                updated = {}
+                for k, v in data.items():
+                    if isinstance(v, str):
+                        updated[k] = {"role": v, "status": "active", "uploaded_at": datetime.utcnow().isoformat()}
+                    else:
+                        updated[k] = v
+                return updated
         except Exception:
             pass
     return {}
@@ -48,8 +57,25 @@ def _save_metadata(md: dict) -> None:
 @token_required
 def upload_file():
     try:
+        user_role = request.user.get("role", "general").lower()
+        user_email = request.user.get("email")
+        # Define roles allowed to upload (Admin or any Department)
+        ALLOWED_UPLOAD_ROLES = ["admin", "finance", "hr", "marketing", "engineering"]
+        
+        if user_role not in ALLOWED_UPLOAD_ROLES:
+            return jsonify({"error": "Permission denied: Only department staff or admins can upload files."}), 403
+
         file = request.files.get("file")
-        role = request.form.get("role", "general").lower()
+        requested_role = request.form.get("role", "general").lower()
+        
+        # Security: Non-admins can only upload to their own department
+        if user_role != "admin":
+            role = user_role
+            status = "pending"
+        else:
+            role = requested_role
+            status = "active"
+
         if not file:
             return jsonify({"error": "No file uploaded"}), 400
 
@@ -63,10 +89,21 @@ def upload_file():
         file.save(filepath)
 
         md = _load_metadata()
-        md[safe_name] = role
+        md[safe_name] = {
+            "role": role,
+            "status": status,
+            "uploaded_by": user_email,
+            "uploaded_at": datetime.utcnow().isoformat()
+        }
         _save_metadata(md)
 
-        # Cleanup old chunks if re-uploading
+        if status == "pending":
+            return jsonify({
+                "message": "File uploaded successfully. Awaiting administrator approval before indexing.",
+                "status": "pending"
+            })
+
+        # Cleanup old chunks if re-uploading (only for active/admin)
         try:
             from backend.repositories.vector_repo import delete_by_source
             from backend.rag.embeddings.encoder import get_embeddings
@@ -74,19 +111,18 @@ def upload_file():
         except Exception as ve:
             print(f"[Upload] Vector store cleanup warning: {ve}")
 
-        # ingest_document(filepath, role) -- REPLACED BY CELERY
         try:
             task = ingest_document_task.delay(filepath, role)
             return jsonify({
                 "message": "File upload accepted. Processing in background.",
-                "task_id": task.id
+                "task_id": task.id,
+                "status": "active"
             })
         except Exception as celery_err:
             print(f"[Upload] Celery/Redis error, falling back to sync: {celery_err}")
-            # Fallback to synchronous ingestion
             try:
                 ingest_document(filepath, role)
-                return jsonify({"message": "File uploaded & indexed successfully (Synchronous fallback)"})
+                return jsonify({"message": "File uploaded & indexed successfully (Synchronous fallback)", "status": "active"})
             except Exception as ingest_err:
                 return jsonify({"error": f"Ingestion failed: {str(ingest_err)}"}), 500
 
@@ -266,6 +302,7 @@ def history():
 
 @api_routes.route("/files", methods=["GET"])
 @token_required
+@require_admin
 def list_files():
     try:
         if not os.path.exists(DOCUMENTS_DIR):
@@ -276,8 +313,103 @@ def list_files():
             ext = os.path.splitext(f)[1].lower()
             if ext in ALLOWED_EXTENSIONS:
                 size_kb = os.path.getsize(os.path.join(DOCUMENTS_DIR, f)) // 1024
-                file_list.append({"name": f, "size_kb": size_kb, "role": md.get(f, "general")})
+                info = md.get(f, {})
+                if isinstance(info, str): # Handle legacy string entries
+                    info = {"role": info, "status": "active"}
+                
+                file_list.append({
+                    "name": f, 
+                    "size_kb": size_kb, 
+                    "role": info.get("role", "general"),
+                    "status": info.get("status", "active"),
+                    "uploaded_by": info.get("uploaded_by", "system"),
+                    "uploaded_at": info.get("uploaded_at")
+                })
         return jsonify({"files": file_list})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Document Approval ────────────────────────────────────────────────
+
+@api_routes.route("/admin/pending", methods=["GET"])
+@token_required
+@require_admin
+def list_pending_files():
+    try:
+        md = _load_metadata()
+        pending = []
+        for name, info in md.items():
+            if info.get("status") == "pending":
+                filepath = os.path.join(DOCUMENTS_DIR, name)
+                size_kb = os.path.getsize(filepath) // 1024 if os.path.exists(filepath) else 0
+                pending.append({
+                    "name": name,
+                    "size_kb": size_kb,
+                    "role": info.get("role"),
+                    "uploaded_by": info.get("uploaded_by"),
+                    "uploaded_at": info.get("uploaded_at")
+                })
+        return jsonify({"pending": pending})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_routes.route("/admin/approve/<filename>", methods=["POST"])
+@token_required
+@require_admin
+def approve_file(filename):
+    try:
+        md = _load_metadata()
+        if filename not in md:
+            return jsonify({"error": "File metadata not found"}), 404
+        
+        info = md[filename]
+        if info.get("status") != "pending":
+            return jsonify({"error": "File is not in pending status"}), 400
+        
+        filepath = os.path.join(DOCUMENTS_DIR, filename)
+        if not os.path.exists(filepath):
+            return jsonify({"error": "Physical file missing"}), 404
+
+        # Update status
+        info["status"] = "active"
+        info["approved_at"] = datetime.utcnow().isoformat()
+        _save_metadata(md)
+
+        # Trigger Ingestion
+        try:
+            task = ingest_document_task.delay(filepath, info["role"])
+            return jsonify({
+                "message": f"File '{filename}' approved and indexing started.",
+                "task_id": task.id
+            })
+        except Exception as celery_err:
+            print(f"[Approve] Celery error, falling back to sync: {celery_err}")
+            ingest_document(filepath, info["role"])
+            return jsonify({"message": f"File '{filename}' approved and indexed synchronously."})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_routes.route("/admin/reject/<filename>", methods=["DELETE"])
+@token_required
+@require_admin
+def reject_file(filename):
+    try:
+        md = _load_metadata()
+        if filename not in md:
+            return jsonify({"error": "File metadata not found"}), 404
+        
+        filepath = os.path.join(DOCUMENTS_DIR, filename)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            
+        md.pop(filename)
+        _save_metadata(md)
+        
+        return jsonify({"message": f"File '{filename}' rejected and deleted."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -286,6 +418,7 @@ def list_files():
 
 @api_routes.route("/files/<filename>", methods=["DELETE", "OPTIONS"])
 @token_required
+@require_admin
 def delete_file(filename):
     print(f"[Delete] Request received for: {filename}")
     if ".." in filename or "/" in filename or "\\" in filename:
@@ -347,31 +480,44 @@ def get_task_status(task_id):
 
 @api_routes.route("/admin/stats", methods=["GET"])
 @token_required
+@require_admin
 def get_admin_stats():
     """
     Consolidated stats for the admin dashboard.
     """
     try:
-        # 1. Document Count
+        md = _load_metadata()
+        
+        # 1. Indexed Document Count (Only 'active' status)
         doc_count = 0
+        active_roles = set()
+        
         if os.path.exists(DOCUMENTS_DIR):
-            doc_count = len([f for f in os.listdir(DOCUMENTS_DIR) 
-                             if os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS])
+            for filename, info in md.items():
+                # Only count files that are approved ('active') and exist on disk
+                if info.get("status") == "active":
+                    if os.path.exists(os.path.join(DOCUMENTS_DIR, filename)):
+                        doc_count += 1
+                        active_roles.add(info.get("role", "general"))
         
         # 2. Queries Today
         metrics = monitoring_repo.get_aggregate()
         query_count = metrics.get("total_queries", 0)
         
-        # 3. Active Departments
-        md = _load_metadata()
-        active_roles = set(md.values())
+        # 3. Active Departments (count of unique roles with active docs)
         if not active_roles:
-            active_roles = {"general"}
+            # Check if there are any physical files at all for fallback
+            if doc_count == 0:
+                active_dept_count = 0
+            else:
+                active_dept_count = 1 # 'general'
+        else:
+            active_dept_count = len(active_roles)
         
         return jsonify({
             "total_docs": doc_count,
             "total_queries": query_count,
-            "active_departments": len(active_roles),
+            "active_departments": active_dept_count,
             "system_status": "Online",
             "uptime": "100%"
         })

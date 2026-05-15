@@ -7,11 +7,15 @@ from flask import Blueprint, jsonify, request
 
 from backend.monitoring import repository
 from backend.monitoring.evaluator import run_ragas_eval_safe
+from backend.core.security import token_required
+from backend.rbac.decorators import require_admin
 
 monitoring_bp = Blueprint("monitoring", __name__)
 
 
 @monitoring_bp.route("/metrics", methods=["GET"])
+@token_required
+@require_admin
 def get_metrics():
     return jsonify({
         "ragas":  repository.get_aggregate(),
@@ -20,17 +24,23 @@ def get_metrics():
 
 
 @monitoring_bp.route("/history", methods=["GET"])
+@token_required
+@require_admin
 def get_history():
     n = min(int(request.args.get("n", 20)), 100)
     return jsonify({"history": list(reversed(repository.get_recent_evals(n)))})
 
 
 @monitoring_bp.route("/token-usage", methods=["GET"])
+@token_required
+@require_admin
 def get_token_usage():
     return jsonify(repository.get_token_totals())
 
 
 @monitoring_bp.route("/evaluate", methods=["POST"])
+@token_required
+@require_admin
 def manual_evaluate():
     data     = request.get_json() or {}
     question = data.get("question", "")
@@ -42,6 +52,8 @@ def manual_evaluate():
 
 
 @monitoring_bp.route("/reset", methods=["DELETE"])
+@token_required
+@require_admin
 def reset_metrics():
     repository.reset()
     return jsonify({"message": "Metrics reset"})

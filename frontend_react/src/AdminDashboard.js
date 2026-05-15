@@ -3,33 +3,9 @@ import axios from "axios";
 
 const API = "http://127.0.0.1:5000/api";
 
-// ─── Static data ──────────────────────────────────────────────────
-const STATS = [
-  { label: "Indexed Documents", value: "—",      icon: "📄", change: "Live count", color: "#3b82f6", bg: "#eff6ff" },
-  { label: "Queries Today",     value: "47",      icon: "🔍", change: "+12 vs yesterday", color: "#10b981", bg: "#ecfdf5" },
-  { label: "Active Departments",value: "5",       icon: "🏢", change: "All online",    color: "#8b5cf6", bg: "#f5f3ff" },
-  { label: "System Status",     value: "Online",  icon: "⚡", change: "100% uptime",  color: "#f59e0b", bg: "#fffbeb" },
-];
-
-const DEPARTMENTS = [
-  { name: "Finance",     icon: "💰", role: "finance",     color: "#10b981", accessLevel: "L3 Restricted", docTypes: "Invoices, Reports, Budgets",       queryCount: 28, status: "Secure" },
-  { name: "HR",          icon: "🧑‍💼", role: "hr",          color: "#8b5cf6", accessLevel: "L2 Internal",   docTypes: "Policies, Payroll, CVs",        queryCount: 15, status: "Active" },
-  { name: "Marketing",   icon: "📣", role: "marketing",   color: "#f59e0b", accessLevel: "L1 Public",     docTypes: "Campaigns, Data, Ads",          queryCount: 42, status: "Active" },
-  { name: "General",     icon: "👤", role: "general",     color: "#6366f1", accessLevel: "L1 Public",     docTypes: "General Info, Manuals",         queryCount: 94, status: "Active" },
-  { name: "Engineering", icon: "⚙️", role: "engineering", color: "#0ea5e9", accessLevel: "L2 Internal",   docTypes: "Technical Docs, Architecture",  queryCount: 31, status: "Active" },
-];
-
-const ACTIVITY = [
-  { time: "2 min ago",  icon: "🔍", text: "Finance user queried: Q4 budget projections",   label: "Query",  color: "#3b82f6" },
-  { time: "5 min ago",  icon: "🔍", text: "HR user queried: Leave policy 2026 update",     label: "Query",  color: "#3b82f6" },
-  { time: "12 min ago", icon: "📄", text: "Document uploaded: Annual_Report_2025.pdf",      label: "Upload", color: "#10b981" },
-  { time: "18 min ago", icon: "🔍", text: "Marketing queried: Campaign ROI metrics",       label: "Query",  color: "#3b82f6" },
-  { time: "1 hr ago",   icon: "🔐", text: "Admin logged in from 10.86.38.207",              label: "Auth",   color: "#f59e0b" },
-  { time: "2 hr ago",   icon: "📄", text: "Document uploaded: HR_Policy_v3.pdf",            label: "Upload", color: "#10b981" },
-];
-
 const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard",       icon: "🏠" },
+  { id: "approvals", label: "Approvals",       icon: "✅" },
   { id: "chat",      label: "Query Assistant", icon: "💬" },
   { id: "files",     label: "Manage Files",    icon: "🗂️" },
   { id: "monitoring",label: "Monitoring",      icon: "📊" },
@@ -46,6 +22,122 @@ function formatRelativeTime(isoString) {
   if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
   if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hr ago`;
   return date.toLocaleDateString();
+}
+
+// ─── Approvals Panel ───────────────────────────────────────────────
+function ApprovalsPanel({ user }) {
+  const [pending, setPending] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actioning, setActioning] = useState(null);
+
+  const fetchPending = async () => {
+    try {
+      const res = await axios.get(`${API}/admin/pending`, {
+        headers: { "Authorization": `Bearer ${user.token}` }
+      });
+      setPending(res.data.pending || []);
+    } catch (err) {
+      console.error("Failed to fetch pending files", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchPending(); }, []);
+
+  const handleApprove = async (filename) => {
+    setActioning(filename);
+    try {
+      await axios.post(`${API}/admin/approve/${filename}`, {}, {
+        headers: { "Authorization": `Bearer ${user.token}` }
+      });
+      setPending(prev => prev.filter(p => p.name !== filename));
+    } catch (err) {
+      alert("Failed to approve file");
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const handleReject = async (filename) => {
+    if (!window.confirm(`Are you sure you want to reject and delete "${filename}"?`)) return;
+    setActioning(filename);
+    try {
+      await axios.delete(`${API}/admin/reject/${filename}`, {
+        headers: { "Authorization": `Bearer ${user.token}` }
+      });
+      setPending(prev => prev.filter(p => p.name !== filename));
+    } catch (err) {
+      alert("Failed to reject file");
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  if (loading) return <div className="p-10 text-center text-gray-400">Loading pending requests...</div>;
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Pending Approvals</h2>
+          <p className="text-sm text-gray-500">Review documents uploaded by department users before they are indexed.</p>
+        </div>
+        <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full text-sm font-bold shadow-sm">
+          {pending.length} Waiting
+        </div>
+      </div>
+
+      {pending.length === 0 ? (
+        <div className="bg-white rounded-3xl border border-gray-100 p-16 text-center shadow-sm">
+          <div className="text-5xl mb-4">🎉</div>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">No Pending Requests</h3>
+          <p className="text-gray-500">All department uploads have been processed.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {pending.map((file) => (
+            <div key={file.name} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between">
+              <div className="flex items-center gap-5">
+                <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-2xl">
+                  {file.name.endsWith('.pdf') ? '📕' : file.name.endsWith('.docx') ? '📘' : '📄'}
+                </div>
+                <div>
+                  <h4 className="font-bold text-gray-800 flex items-center gap-2">
+                    {file.name}
+                    <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full uppercase tracking-wider">{file.size_kb} KB</span>
+                  </h4>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-xs text-indigo-600 font-bold uppercase tracking-widest">{file.role}</span>
+                    <span className="text-xs text-gray-400">•</span>
+                    <span className="text-xs text-gray-500">Uploaded by <b>{file.uploaded_by}</b></span>
+                    <span className="text-xs text-gray-400">•</span>
+                    <span className="text-xs text-gray-500">{formatRelativeTime(file.uploaded_at)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => handleReject(file.name)}
+                  disabled={!!actioning}
+                  className="px-4 py-2 text-sm font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  Reject
+                </button>
+                <button 
+                  onClick={() => handleApprove(file.name)}
+                  disabled={!!actioning}
+                  className="px-6 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all disabled:opacity-50"
+                >
+                  {actioning === file.name ? "Processing..." : "Approve & Index"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Score progress bar ─────────────────────────────────────────
@@ -470,7 +562,7 @@ function FileManagerPanel({ token }) {
         {/* Upload Card */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-bold text-gray-700">📤 Push New Document</label>
+            <label className="text-sm font-bold text-gray-700">📤 Upload to Department</label>
             <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50">
               <option value="finance">Finance</option>
@@ -604,10 +696,14 @@ function FileManagerPanel({ token }) {
                       return (
                         <td key={role} className="p-3 align-top border-l first:border-l-0 border-gray-50/50">
                           <div className={`relative p-4 rounded-3xl border transition-all duration-300 group/card animate-in zoom-in-95
-                            ${confirmDelete === file.name ? 'border-red-200 bg-red-50 ring-4 ring-red-100/50' : 'border-gray-50 bg-gray-50/50 hover:bg-white hover:shadow-xl hover:border-gray-200 hover:-translate-y-1'}`}>
+                            ${confirmDelete === file.name ? 'border-red-200 bg-red-50 ring-4 ring-red-100/50' 
+                              : file.status === 'pending' ? 'border-amber-200 bg-amber-50/50'
+                              : 'border-gray-50 bg-gray-50/50 hover:bg-white hover:shadow-xl hover:border-gray-200 hover:-translate-y-1'}`}>
                             
                             <div className="flex items-start justify-between gap-3 mb-3">
-                              <div className="w-9 h-9 rounded-2xl bg-white shadow-sm flex items-center justify-center text-lg border border-gray-50">📄</div>
+                              <div className={`w-9 h-9 rounded-2xl shadow-sm flex items-center justify-center text-lg border ${file.status === 'pending' ? 'bg-amber-100 border-amber-200' : 'bg-white border-gray-50'}`}>
+                                {file.status === 'pending' ? '⏳' : '📄'}
+                              </div>
                               {isDeleting ? (
                                 <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin mt-1" />
                               ) : confirmDelete === file.name ? (
@@ -624,16 +720,24 @@ function FileManagerPanel({ token }) {
                             </div>
 
                             <div className="min-w-0">
-                              <p className="text-[12px] font-black text-gray-900 leading-[1.3] mb-2 line-clamp-2 cursor-help" title={file.name}>
+                              <p className="text-[12px] font-black text-gray-900 leading-[1.3] mb-1 line-clamp-2 cursor-help" title={file.name}>
                                 {file.name}
                               </p>
+                              <p className="text-[9px] text-gray-400 font-bold truncate mb-2">By {file.uploaded_by || 'system'}</p>
                               
                               <div className="flex items-center justify-between border-t border-gray-100 pt-2.5 mt-2">
                                 <span className="text-[9px] font-black text-gray-400 uppercase tracking-wider">{fmtSize(file.size_kb)}</span>
-                                <span className="flex items-center gap-1.5 text-[9px] font-black text-emerald-600 uppercase tracking-widest">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                                  Ready
-                                </span>
+                                {file.status === 'pending' ? (
+                                  <span className="flex items-center gap-1.5 text-[9px] font-black text-amber-600 uppercase tracking-widest">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                    Pending
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1.5 text-[9px] font-black text-emerald-600 uppercase tracking-widest">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                                    Ready
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -705,30 +809,44 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      const [statsRes, deptsRes, activityRes] = await Promise.all([
-        axios.get(`${API}/admin/stats`, { headers: { "Authorization": `Bearer ${user.token}` } }),
-        axios.get(`${API}/admin/departments`, { headers: { "Authorization": `Bearer ${user.token}` } }),
-        axios.get(`${API}/admin/activity`, { headers: { "Authorization": `Bearer ${user.token}` } }),
-      ]);
-
-      const s = statsRes.data;
-      setStats([
-        { label: "Indexed Documents", value: s.total_docs, icon: "📄", change: "Live count", color: "#3b82f6", bg: "#eff6ff" },
-        { label: "Queries Today", value: s.total_queries, icon: "🔍", change: "Evaluated", color: "#10b981", bg: "#ecfdf5" },
-        { label: "Active Departments", value: s.active_departments, icon: "🏢", change: "All online", color: "#8b5cf6", bg: "#f5f3ff" },
-        { label: "System Status", value: s.system_status, icon: "⚡", change: s.uptime || "100% uptime", color: "#f59e0b", bg: "#fffbeb" },
-      ]);
-
-      setDepartments(deptsRes.data.departments || []);
+      const headers = { "Authorization": `Bearer ${user.token}` };
       
-      const mappedActivity = (activityRes.data.activity || []).map(a => ({
-        ...a,
-        time: formatRelativeTime(a.time)
-      }));
-      setActivity(mappedActivity);
+      // 1. Stats
+      try {
+        const statsRes = await axios.get(`${API}/admin/stats`, { headers });
+        const s = statsRes.data;
+        setStats([
+          { label: "Indexed Documents", value: s.total_docs, icon: "📄", change: "Live count", color: "#3b82f6", bg: "#eff6ff" },
+          { label: "Queries Today", value: s.total_queries, icon: "🔍", change: "Evaluated", color: "#10b981", bg: "#ecfdf5" },
+          { label: "Active Departments", value: s.active_departments, icon: "🏢", change: "All online", color: "#8b5cf6", bg: "#f5f3ff" },
+          { label: "System Status", value: s.system_status, icon: "⚡", change: s.uptime || "100% uptime", color: "#f59e0b", bg: "#fffbeb" },
+        ]);
+      } catch (err) {
+        console.error("Dashboard stats fetch error:", err);
+      }
+
+      // 2. Departments
+      try {
+        const deptsRes = await axios.get(`${API}/admin/departments`, { headers });
+        setDepartments(deptsRes.data.departments || []);
+      } catch (err) {
+        console.error("Dashboard departments fetch error:", err);
+      }
+
+      // 3. Activity
+      try {
+        const activityRes = await axios.get(`${API}/admin/activity`, { headers });
+        const mappedActivity = (activityRes.data.activity || []).map(a => ({
+          ...a,
+          time: formatRelativeTime(a.time)
+        }));
+        setActivity(mappedActivity);
+      } catch (err) {
+        console.error("Dashboard activity fetch error:", err);
+      }
 
     } catch (err) {
-      console.error("Dashboard data fetch error:", err);
+      console.error("Dashboard data fetch error (critical):", err);
     } finally {
       setLoading(false);
     }
@@ -937,6 +1055,9 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
 
           {/* ── Manage Files ── */}
           {activeNav === "files" && <FileManagerPanel token={user.token} />}
+
+          {/* ── Approvals ── */}
+          {activeNav === "approvals" && <ApprovalsPanel user={user} />}
 
           {/* ── Monitoring ── */}
           {activeNav === "monitoring" && <MonitoringPanel token={user.token} />}

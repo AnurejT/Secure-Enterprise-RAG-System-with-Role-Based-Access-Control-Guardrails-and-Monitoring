@@ -27,6 +27,14 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
   const [roleToast, setRoleToast] = useState(null);
   const [pendingRole, setPendingRole] = useState(null); // role awaiting confirmation
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  
+  // New Upload State
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadMsg, setUploadMsg] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef(null);
+
   const chatEndRef   = useRef(null);
   const inputRef     = useRef(null);
   const toastTimerRef = useRef(null);
@@ -52,6 +60,73 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  // ── Upload Logic ──
+  const handleUpload = async (file) => {
+    if (!file || uploading) return;
+    
+    const ALLOWED = [".pdf", ".docx", ".csv", ".xlsx", ".md"];
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+    if (!ALLOWED.includes(ext)) {
+      setUploadMsg({ type: "error", text: `Unsupported: ${ext}. Use PDF, DOCX, CSV, MD.` });
+      setTimeout(() => setUploadMsg(null), 5000);
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+    setUploadMsg({ type: "info", text: `Uploading ${file.name}...` });
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("role", role); // Locks to current context role (which for users is their dept)
+
+    try {
+      const res = await axios.post(`${API}/upload`, formData, {
+        headers: { "Authorization": `Bearer ${user.token}` }
+      });
+
+      const taskId = res.data.task_id;
+      if (!taskId) {
+        const msg = res.data.status === "pending" 
+          ? "✅ Uploaded! Awaiting admin approval." 
+          : "✅ Upload complete!";
+        setUploadMsg({ type: "success", text: msg });
+        setUploading(false);
+        setTimeout(() => setUploadMsg(null), 5000);
+        return;
+      }
+
+      // Poll Task Status
+      const poll = async () => {
+        try {
+          const sRes = await axios.get(`${API}/tasks/${taskId}`, {
+            headers: { "Authorization": `Bearer ${user.token}` }
+          });
+          const { status, progress, message } = sRes.data;
+          if (status === "SUCCESS") {
+            setUploadProgress(100);
+            setUploadMsg({ type: "success", text: "✅ Document indexed!" });
+            setUploading(false);
+            setTimeout(() => setUploadMsg(null), 3000);
+          } else if (status === "FAILURE") {
+            setUploadMsg({ type: "error", text: "❌ Indexing failed." });
+            setUploading(false);
+          } else {
+            setUploadProgress(progress || 0);
+            setUploadMsg({ type: "info", text: message || "Processing..." });
+            setTimeout(poll, 1500);
+          }
+        } catch {
+          setUploading(false);
+        }
+      };
+      poll();
+    } catch (err) {
+      setUploadMsg({ type: "error", text: "❌ Upload failed." });
+      setUploading(false);
+    }
+  };
 
   // 3. Streaming Query Implementation
   const sendQuery = async () => {
@@ -189,7 +264,7 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
           </div>
         </div>
 
-        <div className="section-title">Access Role</div>
+        <div className="section-title">Department Context</div>
         {isAdmin ? (
           <div className="role-list">
             {allowedRoles.map((r) => (
@@ -210,6 +285,47 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
         )}
 
         <div className="sidebar-footer">● Backend connected</div>
+        
+        {/* Upload Section for Department Users */}
+        {!isAdmin && (
+          <div className="upload-container-sidebar">
+            <div className="upload-header-sidebar">
+              <span>📤 Upload to {selectedRole?.label.split(' ')[1]}</span>
+            </div>
+            <div 
+              className={`upload-dropzone-sidebar ${dragOver ? 'drag' : ''} ${uploading ? 'uploading' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files[0]); }}
+              onClick={() => !uploading && fileInputRef.current?.click()}
+            >
+              <input 
+                ref={fileInputRef} 
+                type="file" 
+                className="hidden" 
+                onChange={(e) => handleUpload(e.target.files[0])}
+                disabled={uploading}
+              />
+              {uploading ? (
+                <div className="upload-progress-wrap">
+                  <div className="upload-spinner-small" />
+                  <span className="upload-pct">{uploadProgress}%</span>
+                </div>
+              ) : (
+                <div className="upload-prompt">
+                  <span className="upload-icon">📄</span>
+                  <span className="upload-text">Drop or Click</span>
+                </div>
+              )}
+            </div>
+            {uploadMsg && (
+              <div className={`upload-msg-sidebar ${uploadMsg.type}`}>
+                {uploadMsg.text}
+              </div>
+            )}
+          </div>
+        )}
+
         <button onClick={onLogout} className="logout-btn-sidebar">← Logout</button>
       </aside>
 
@@ -217,7 +333,7 @@ function ChatApp({ user, onLogout, onBackToDashboard }) {
         <div className="chat-header">
           <div>
             <div className="chat-title">Ask your enterprise documents</div>
-            <div className="chat-subtitle">Querying as <span className="role-badge" style={{ background: selectedRole?.color }}>{selectedRole?.label}</span></div>
+            <div className="chat-subtitle">Context: <span className="role-badge" style={{ background: selectedRole?.color }}>{selectedRole?.label}</span></div>
           </div>
           <button className="clear-btn" onClick={() => setShowClearConfirm(true)}>🗑️ Clear Chat</button>
         </div>
