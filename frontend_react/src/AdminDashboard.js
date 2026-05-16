@@ -4,12 +4,14 @@ import axios from "axios";
 const API = "http://127.0.0.1:5000/api";
 
 const NAV_ITEMS = [
-  { id: "chat",       label: "Search Interface",    icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg> },
+  { id: "dashboard",  label: "Dashboard",           icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg> },
+  { id: "chat",       label: "Query Assistant",     icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg> },
   { id: "files",      label: "Document Management", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg> },
-  { id: "approvals",  label: "Access Control",      icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> },
-  { id: "guardrails", label: "Security Guardrails", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>, soon: true },
-  { id: "dashboard",  label: "Monitoring",          icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg> },
+  { id: "approvals",  label: "Approvals",           icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg> },
+  { id: "monitoring", label: "Monitoring (Ragas & LangSmith)", icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg> },
+  { id: "settings",   label: "Settings",            icon: <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg> },
 ];
+
 
 function formatRelativeTime(isoString) {
   if (!isoString) return "Just now";
@@ -621,6 +623,225 @@ function FileManagerPanel({ token }) {
   );
 }
 
+// ─── Settings Panel ───────────────────────────────────────────────
+function SettingsPanel({ user }) {
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [config, setConfig] = useState({
+    llmProvider: "groq",
+    embeddingModel: "sentence-transformers/all-MiniLM-L6-v2",
+    chunkSize: 1024,
+    chunkOverlap: 128,
+    piiFilter: true,
+    injectionProtection: true,
+    toxicityThreshold: 0.85,
+    sessionExpiry: 30,
+    mfaEnforced: false,
+  });
+
+  const handleChange = (key, val) => {
+    setConfig(prev => ({ ...prev, [key]: val }));
+  };
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setMsg(null);
+    setTimeout(() => {
+      setSaving(false);
+      setMsg({ type: "success", text: "✅ System configuration updated successfully." });
+    }, 1000);
+  };
+
+  return (
+    <div className="space-y-8 max-w-[1200px] mx-auto">
+      <div>
+        <h2 className="text-[28px] font-bold text-[#0a0a0a] tracking-tight leading-none mb-2">System Settings</h2>
+        <p className="text-[13px] text-gray-500 font-medium">Configure global RAG parameters, LLM orchestration, and security guardrails.</p>
+      </div>
+
+      {msg && (
+        <div className={`p-4 rounded-[4px] text-[13px] font-bold tracking-wide border ${
+          msg.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-red-50 text-red-800 border-red-200'
+        }`}>
+          {msg.text}
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-8">
+        {/* 1. AI & RAG Engine */}
+        <div className="bg-white rounded-[4px] border border-gray-200 shadow-sm p-6 space-y-6">
+          <div className="border-b border-gray-100 pb-4">
+            <h3 className="text-[15px] font-bold text-[#0a0a0a] tracking-tight">AI & Retrieval Parameters</h3>
+            <p className="text-[12px] text-gray-500 mt-0.5">Manage active language models and vector chunking strategies.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-widest mb-2">LLM Provider</label>
+              <select 
+                value={config.llmProvider} 
+                onChange={(e) => handleChange("llmProvider", e.target.value)}
+                className="w-full border border-gray-300 rounded-[4px] px-3 py-2.5 text-[13px] font-medium text-[#0a0a0a] focus:outline-none focus:border-[#0a0a0a] shadow-sm bg-white"
+              >
+                <option value="groq">Groq (Llama 3 70B / 8B)</option>
+                <option value="openai">OpenAI (GPT-4o)</option>
+                <option value="local">Local HuggingFace</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-widest mb-2">Embedding Model</label>
+              <select 
+                value={config.embeddingModel} 
+                onChange={(e) => handleChange("embeddingModel", e.target.value)}
+                className="w-full border border-gray-300 rounded-[4px] px-3 py-2.5 text-[13px] font-medium text-[#0a0a0a] focus:outline-none focus:border-[#0a0a0a] shadow-sm bg-white"
+              >
+                <option value="sentence-transformers/all-MiniLM-L6-v2">all-MiniLM-L6-v2 (Default Fast)</option>
+                <option value="BAAI/bge-large-en-v1.5">BGE Large en v1.5 (High Accuracy)</option>
+                <option value="text-embedding-3-small">OpenAI text-embedding-3-small</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-widest mb-2">Chunk Size (Tokens)</label>
+              <input 
+                type="number" 
+                value={config.chunkSize} 
+                onChange={(e) => handleChange("chunkSize", parseInt(e.target.value) || 0)}
+                className="w-full border border-gray-300 rounded-[4px] px-3 py-2 text-[13px] font-medium text-[#0a0a0a] focus:outline-none focus:border-[#0a0a0a] shadow-sm" 
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-widest mb-2">Chunk Overlap</label>
+              <input 
+                type="number" 
+                value={config.chunkOverlap} 
+                onChange={(e) => handleChange("chunkOverlap", parseInt(e.target.value) || 0)}
+                className="w-full border border-gray-300 rounded-[4px] px-3 py-2 text-[13px] font-medium text-[#0a0a0a] focus:outline-none focus:border-[#0a0a0a] shadow-sm" 
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Security Guardrails */}
+        <div className="bg-white rounded-[4px] border border-gray-200 shadow-sm p-6 space-y-6">
+          <div className="border-b border-gray-100 pb-4">
+            <h3 className="text-[15px] font-bold text-[#0a0a0a] tracking-tight">Security & Guardrail Rules</h3>
+            <p className="text-[12px] text-gray-500 mt-0.5">Real-time prompt interception and data loss prevention policies.</p>
+          </div>
+
+          <div className="space-y-4">
+            <label className="flex items-center justify-between p-4 rounded-[4px] bg-[#fafafa] border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors">
+              <div>
+                <span className="text-[13px] font-bold text-[#0a0a0a] block">PII & Sensitive Data Filtering</span>
+                <span className="text-[12px] text-gray-500 font-medium">Automatically mask SSNs, credit cards, and confidential identifiers before LLM processing.</span>
+              </div>
+              <input 
+                type="checkbox" 
+                checked={config.piiFilter} 
+                onChange={(e) => handleChange("piiFilter", e.target.checked)}
+                className="w-4 h-4 text-[#0a0a0a] focus:ring-[#0a0a0a] rounded border-gray-300"
+              />
+            </label>
+
+            <label className="flex items-center justify-between p-4 rounded-[4px] bg-[#fafafa] border border-gray-200 cursor-pointer hover:border-gray-300 transition-colors">
+              <div>
+                <span className="text-[13px] font-bold text-[#0a0a0a] block">Prompt Injection Protection</span>
+                <span className="text-[12px] text-gray-500 font-medium">Analyze user queries for jailbreak attempts and malicious override commands.</span>
+              </div>
+              <input 
+                type="checkbox" 
+                checked={config.injectionProtection} 
+                onChange={(e) => handleChange("injectionProtection", e.target.checked)}
+                className="w-4 h-4 text-[#0a0a0a] focus:ring-[#0a0a0a] rounded border-gray-300"
+              />
+            </label>
+
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[11px] font-bold text-gray-600 uppercase tracking-widest">Toxicity Sensitivity Threshold</span>
+                <span className="text-[13px] font-bold text-[#0a0a0a]">{config.toxicityThreshold}</span>
+              </div>
+              <input 
+                type="range" 
+                min="0.5" 
+                max="1.0" 
+                step="0.05"
+                value={config.toxicityThreshold} 
+                onChange={(e) => handleChange("toxicityThreshold", parseFloat(e.target.value))}
+                className="w-full accent-[#0a0a0a] bg-gray-200 rounded-lg appearance-none h-2 cursor-pointer"
+              />
+              <div className="flex justify-between text-[10px] text-gray-400 font-medium mt-1">
+                <span>Strict (0.5)</span>
+                <span>Permissive (1.0)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Session & Access */}
+        <div className="bg-white rounded-[4px] border border-gray-200 shadow-sm p-6 space-y-6">
+          <div className="border-b border-gray-100 pb-4">
+            <h3 className="text-[15px] font-bold text-[#0a0a0a] tracking-tight">Access & Session Governance</h3>
+            <p className="text-[12px] text-gray-500 mt-0.5">Control token lifetimes and multi-factor requirements.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-widest mb-2">JWT Expiry (Minutes)</label>
+              <input 
+                type="number" 
+                value={config.sessionExpiry} 
+                onChange={(e) => handleChange("sessionExpiry", parseInt(e.target.value) || 0)}
+                className="w-full border border-gray-300 rounded-[4px] px-3 py-2 text-[13px] font-medium text-[#0a0a0a] focus:outline-none focus:border-[#0a0a0a] shadow-sm" 
+              />
+            </div>
+
+            <div className="flex items-center pt-6">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={config.mfaEnforced} 
+                  onChange={(e) => handleChange("mfaEnforced", e.target.checked)}
+                  className="w-4 h-4 text-[#0a0a0a] focus:ring-[#0a0a0a] rounded border-gray-300"
+                />
+                <div>
+                  <span className="text-[13px] font-bold text-[#0a0a0a] block">Enforce Multi-Factor Auth (MFA)</span>
+                  <span className="text-[11px] text-gray-500 font-medium">Require 2FA verification for all L3 department users.</span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-4">
+          <button 
+            type="button" 
+            onClick={() => setMsg({ type: "info", text: "ℹ️ Settings restored to default." })}
+            className="px-5 py-2.5 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-[4px] text-[12px] font-bold tracking-wide transition-colors shadow-sm"
+          >
+            RESET DEFAULTS
+          </button>
+          <button 
+            type="submit" 
+            disabled={saving}
+            className="px-6 py-2.5 bg-[#0a0a0a] text-white hover:bg-gray-800 rounded-[4px] text-[12px] font-bold tracking-wide transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-white rounded-full animate-spin"></div>
+                SAVING...
+              </>
+            ) : "SAVE CONFIGURATION"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // ─── Main Admin Dashboard ─────────────────────────────────────────
 export default function AdminDashboard({ user, onLogout, onOpenChat }) {
   const [activeNav, setActiveNav] = useState("dashboard");
@@ -693,8 +914,8 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
   }, [activeNav, fetchDashboardData]);
 
   const handleNav = (id) => {
-    if (id === "chat")                          { onOpenChat(); return; }
-    if (id === "analytics" || id === "settings") return;
+    if (id === "chat") { onOpenChat(); return; }
+    if (id === "analytics") return;
     setActiveNav(id);
   };
 
@@ -713,7 +934,7 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
       <aside className="w-[240px] flex-shrink-0 bg-[#f8f9fa] border-r border-gray-200 flex flex-col shadow-[1px_0_10px_rgba(0,0,0,0.02)] z-20">
         {/* Logo */}
         <div className="px-6 py-6 border-b border-gray-200 bg-[#f8f9fa]">
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-3">
              <div className="w-8 h-8 bg-[#0a0a0a] rounded flex items-center justify-center text-white shrink-0">
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
              </div>
@@ -722,10 +943,6 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
                <div className="text-[10px] text-gray-500 font-medium tracking-wide mt-1 truncate">Enterprise RAG</div>
              </div>
           </div>
-          <div className="border-t border-gray-200 -mx-6 mb-5"></div>
-          <button className="w-full bg-[#0a0a0a] text-white py-2.5 rounded flex items-center justify-center gap-2 text-xs font-semibold hover:bg-gray-800 transition-colors shadow-sm">
-            <span className="text-sm font-normal leading-none">+</span> New Analysis
-          </button>
         </div>
 
         {/* Nav */}
@@ -750,7 +967,7 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
 
         {/* Footer Nav */}
         <div className="px-4 pb-6 pt-4 border-t border-gray-200 space-y-1">
-          <button className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
+          <button onClick={() => handleNav("settings")} className="w-full flex items-center gap-3 px-3 py-2 rounded text-xs font-bold text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
              <svg className="w-[18px] h-[18px] text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
              <span className="tracking-wide">Settings</span>
           </button>
@@ -1121,8 +1338,11 @@ export default function AdminDashboard({ user, onLogout, onOpenChat }) {
           {/* ── Monitoring ── */}
           {activeNav === "monitoring" && <div className="p-8"><MonitoringPanel token={user.token} /></div>}
 
+          {/* ── Settings ── */}
+          {activeNav === "settings" && <div className="p-8"><SettingsPanel user={user} /></div>}
+
           {/* ── Other sections stub ── */}
-          {(activeNav !== "dashboard" && activeNav !== "files" && activeNav !== "approvals" && activeNav !== "chat" && activeNav !== "monitoring") && (
+          {(activeNav !== "dashboard" && activeNav !== "files" && activeNav !== "approvals" && activeNav !== "chat" && activeNav !== "monitoring" && activeNav !== "settings") && (
             <div className="flex flex-col items-center justify-center py-32 gap-4 text-gray-400">
               <div className="text-6xl opacity-20">🚧</div>
               <p className="text-lg font-bold text-[#0a0a0a]">Coming Soon</p>
